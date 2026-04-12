@@ -32,6 +32,28 @@ export class ApiError extends Error {
 
 // --- types (kept loose; backend is the schema authority) ---
 
+export interface SettingDef {
+  name: string;
+  type: string;
+  label: string;
+  description: string;
+  default: unknown;
+  minimum: unknown;
+  maximum: unknown;
+  depends_on: string | null;
+  advanced: boolean;
+  usage: string | null;
+  /** Either an array of {value,label} pairs OR camera-driver placeholder
+   *  strings like ["bin_values"] which upstream PHP resolves at install time. */
+  options: Array<{ label: string; value: unknown } | string> | null;
+  /** "reload", "restart", null, etc. — hint that changing this triggers
+   *  Allsky to restart on apply. */
+  action: string | null;
+}
+
+export type SettingsSchema = Record<string, Record<string, SettingDef[]>>;
+
+
 export interface SystemSnapshot {
   host: {
     boot_time: number;
@@ -74,12 +96,11 @@ export const api = {
       `/system/service/${verb}`, { method: "POST" },
     ),
 
-  settingsSchema: () => request<Record<string, Record<string, Array<{
-    name: string; type: string; label: string; description: string;
-    default: unknown; minimum: unknown; maximum: unknown;
-    depends_on: string | null; advanced: boolean; usage: string | null;
-    options: Array<{ label: string; value: unknown }> | null;
-  }>>>>("/settings/schema"),
+  settingsSchema: () => request<SettingsSchema>("/settings/schema"),
+  settingsAudit: () => request<Array<{
+    id: number; ts: number; actor: string | null;
+    key: string; old_value: string | null; new_value: string | null;
+  }>>("/settings/audit"),
   settingsValues: () => request<Record<string, unknown>>("/settings"),
   patchSettings: (patch: Record<string, unknown>) =>
     request<{ ok: boolean }>("/settings", { method: "PATCH", json: patch }),
