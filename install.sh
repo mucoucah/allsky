@@ -361,6 +361,8 @@ ${SERVICE_USER} ALL=(root) NOPASSWD: /usr/bin/systemctl restart allsky.service
 ${SERVICE_USER} ALL=(root) NOPASSWD: /usr/bin/raspi-config nonint *
 ${SERVICE_USER} ALL=(root) NOPASSWD: /usr/sbin/reboot
 ${SERVICE_USER} ALL=(root) NOPASSWD: /usr/sbin/shutdown -h now
+${SERVICE_USER} ALL=(root) NOPASSWD: /usr/bin/tee /boot/config.txt
+${SERVICE_USER} ALL=(root) NOPASSWD: /usr/bin/tee /boot/firmware/config.txt
 SUDOEOF
 chmod 0440 /etc/sudoers.d/allsky-web
 visudo -cf /etc/sudoers.d/allsky-web >/dev/null 2>&1 || true
