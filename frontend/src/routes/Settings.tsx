@@ -87,11 +87,13 @@ export default function Settings() {
       qc.invalidateQueries({ queryKey: ["values"] });
       qc.invalidateQueries({ queryKey: ["audit"] });
       qc.invalidateQueries({ queryKey: ["system"] });
-      setMsg(
-        opts?.restart
-          ? `Saved ${dirtyCount} change${dirtyCount === 1 ? "" : "s"} and restarted Allsky.`
-          : `Saved ${dirtyCount} change${dirtyCount === 1 ? "" : "s"}.`
-      );
+      if (opts?.restart) {
+        setMsg(`Saved ${dirtyCount} change${dirtyCount === 1 ? "" : "s"} and restarted Allsky. Camera settings are now active.`);
+      } else if (needsRestart) {
+        setMsg(`Saved ${dirtyCount} change${dirtyCount === 1 ? "" : "s"}. Note: camera settings (exposure, gain, etc.) require a service restart to take effect.`);
+      } else {
+        setMsg(`Saved ${dirtyCount} change${dirtyCount === 1 ? "" : "s"}.`);
+      }
     },
     onError: (e: Error) => setMsg(`Failed: ${e.message}`),
   });

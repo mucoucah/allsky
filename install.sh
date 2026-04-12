@@ -153,9 +153,9 @@ fi
 # Always refresh status.
 echo '{"status":"Not configured"}' > "${ALLSKY_HOME}/config/status.json"
 
-# Create allsky.service if not present.
-if [[ ! -f /etc/systemd/system/allsky.service ]]; then
-  cat >/etc/systemd/system/allsky.service <<ASEOF
+# Always update allsky.service to ensure correct ALLSKY_HOME path.
+# A previous install may have written a stale path.
+cat >/etc/systemd/system/allsky.service <<ASEOF
 [Unit]
 Description=Allsky Camera
 After=network-online.target
@@ -164,6 +164,7 @@ Wants=network-online.target
 [Service]
 Type=simple
 User=${SUDO_USER:-pi}
+Environment=ALLSKY_HOME=${ALLSKY_HOME}
 ExecStart=${ALLSKY_HOME}/allsky.sh
 Restart=on-failure
 RestartSec=5
@@ -171,12 +172,9 @@ RestartSec=5
 [Install]
 WantedBy=multi-user.target
 ASEOF
-  systemctl daemon-reload
-  systemctl enable allsky.service
-  green "    Created allsky.service."
-else
-  green "    allsky.service already exists."
-fi
+systemctl daemon-reload
+systemctl enable allsky.service
+green "    Updated allsky.service (ExecStart=${ALLSKY_HOME}/allsky.sh)."
 
 # Set up Python venv for Allsky's own modules (flow-runner, etc.).
 if [[ ! -d "${ALLSKY_HOME}/venv" ]]; then
