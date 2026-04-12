@@ -23,7 +23,8 @@ from app.db import connect, insert_alert
 from .channels import Attachment, dispatch
 from .focus import assess_focus
 from .meteor import detect as detect_meteor
-from .store import load_channels, load_comet_config, load_focus_config
+from .rain import detect_rain
+from .store import load_channels, load_comet_config, load_focus_config, load_rain_config
 
 log = logging.getLogger(__name__)
 
@@ -192,6 +193,70 @@ async def focus_watcher(stop: asyncio.Event) -> None:
             await _sleep(stop, 60)
 
     log.info("focus_watcher: stopped")
+
+
+# ── rain watcher ────────────────────────────────────────────────
+
+async def rain_watcher(stop: asyncio.Event) -> None:
+    """Periodically check for rain/moisture on the dome."""
+    log.info("rain_watcher: starting")
+
+    while not stop.is_set():
+        try:
+            cfg = load_rain_config()
+            if not cfg.get("enabled"):
+                await _sleep(stop, 30)
+                continue
+
+            target = paths().latest_image
+            try:
+                if not target.exists():
+                    await _sleep(stop, 10)
+                    continue
+            except OSError:
+                await _sleep(stop, 10)
+                continue
+
+            mask_path = paths().masks_dir / "mask.png"
+            result = detect_rain(
+                target,
+                mask_path=mask_path if mask_path.exists() else None,
+                confidence_threshold=cfg.get("confidence_threshold", 0.4),
+            )
+
+            if result.rain_detected:
+                today = date.today().isoformat()
+                if await _already_alerted("rain", today):
+                    poll = cfg.get("poll_interval_minutes", 5)
+                    await _sleep(stop, poll * 60)
+                    continue
+
+                await _record_alert("rain", today)
+                await insert_alert("warning", "rain",
+                    f"Rain/moisture detected on dome (confidence: {result.confidence:.0%})")
+
+                channels = load_channels()
+                atts = _build_attachments(cfg.get("include_snapshot", True), False)
+
+                subject = "Rain detected on dome"
+                body = (
+                    f"Moisture/rain detected on the allsky dome.\n"
+                    f"Confidence: {result.confidence:.0%}\n"
+                    f"Details: {result.message}"
+                )
+                await dispatch(channels, subject, body, atts)
+                log.info("rain_watcher: alerted (confidence=%.2f)", result.confidence)
+
+            poll = cfg.get("poll_interval_minutes", 5)
+            await _sleep(stop, poll * 60)
+
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            log.exception("rain_watcher: error")
+            await _sleep(stop, 60)
+
+    log.info("rain_watcher: stopped")
 
 
 # ── dedup helpers ────────────────────────────────────────────────

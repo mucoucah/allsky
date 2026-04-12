@@ -11,11 +11,14 @@ from app.allsky.paths import paths
 from app.notify.channels import Attachment, dispatch
 from app.notify.focus import assess_focus, sharpness_score
 from app.notify.meteor import detect as detect_meteor
+from app.notify.rain import detect_rain
 from app.notify.store import (
     delete_channel,
     load_channels,
     load_comet_config,
     load_focus_config,
+    load_rain_config,
+    save_rain_config,
     redacted_channels,
     save_comet_config,
     save_focus_config,
@@ -189,3 +192,44 @@ async def current_focus():
         return result
     except OSError:
         return {"score": None, "baseline": None, "threshold": None, "status": "permission denied"}
+
+
+# ── rain detection ──────────────────────────────────────────────
+
+@router.get("/rain/config")
+async def get_rain_config():
+    return load_rain_config()
+
+
+@router.put("/rain/config")
+async def set_rain_config(body: dict = Body(...)):
+    cfg = load_rain_config()
+    cfg.update(body)
+    save_rain_config(cfg)
+    return {"ok": True}
+
+
+@router.post("/rain/detect-now")
+async def rain_detect_now():
+    """Run rain detection on the current frame."""
+    try:
+        target = paths().latest_image
+        if not target.exists():
+            raise HTTPException(404, "no current frame")
+    except OSError:
+        raise HTTPException(404, "no current frame")
+
+    mask_path = paths().masks_dir / "mask.png"
+    cfg = load_rain_config()
+    result = detect_rain(
+        target,
+        mask_path=mask_path if mask_path.exists() else None,
+        confidence_threshold=cfg.get("confidence_threshold", 0.4),
+    )
+    return {
+        "rain_detected": result.rain_detected,
+        "confidence": result.confidence,
+        "droplet_count": result.droplet_count,
+        "contrast_score": result.contrast_score,
+        "message": result.message,
+    }

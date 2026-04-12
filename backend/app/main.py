@@ -19,7 +19,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from app.allsky.watcher import watch_latest_image
 from app.config import get_settings
 from app.db import init_db
-from app.notify.watchers import focus_watcher, meteor_watcher
+from app.notify.watchers import focus_watcher, meteor_watcher, rain_watcher
 from app.routers import alerts, auth, images, keograms, live, logs, masks, notifications, settings, setup, system
 from app.ws.manager import LiveBroadcaster
 
@@ -38,9 +38,10 @@ async def lifespan(app: FastAPI):
     app.state.watcher_task = asyncio.create_task(
         watch_latest_image(app.state.broadcaster, app.state.watcher_stop)
     )
-    # Alert watchers (meteor detection + focus monitoring).
+    # Alert watchers (meteor detection + focus monitoring + rain detection).
     app.state.meteor_task = asyncio.create_task(meteor_watcher(app.state.watcher_stop))
     app.state.focus_task = asyncio.create_task(focus_watcher(app.state.watcher_stop))
+    app.state.rain_task = asyncio.create_task(rain_watcher(app.state.watcher_stop))
 
     try:
         yield
@@ -50,6 +51,7 @@ async def lifespan(app: FastAPI):
             app.state.watcher_task,
             app.state.meteor_task,
             app.state.focus_task,
+            app.state.rain_task,
         ):
             task.cancel()
             try:
