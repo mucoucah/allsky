@@ -60,9 +60,28 @@ export interface SystemSnapshot {
     uptime_seconds: number;
     cpu_percent: number;
     cpu_temp_c: number | null;
+    cpu_info: { cores_physical: number | null; cores_logical: number | null; architecture: string };
     load_avg: { "1m": number; "5m": number; "15m": number };
-    memory: { total: number; available: number; percent: number };
+    memory: { total: number; available: number; used: number; percent: number };
+    swap: { total: number; used: number; free: number; percent: number };
     disk: { path: string; total: number; used: number; free: number; percent: number };
+    disk_root: { path: string; total: number; used: number; free: number; percent: number };
+    pi_model: string | null;
+    hostname: string;
+    os: string;
+    python_version: string;
+    network: Array<{
+      name: string; is_up: boolean; speed_mbps?: number;
+      bytes_sent?: number; bytes_recv?: number;
+      addresses: Array<{ family: string; address: string; netmask: string | null }>;
+    }>;
+    throttle: {
+      raw: string;
+      under_voltage_now: boolean; freq_capped_now: boolean;
+      throttled_now: boolean; soft_temp_limit_now: boolean;
+      under_voltage_occurred: boolean; freq_capped_occurred: boolean;
+      throttled_occurred: boolean; soft_temp_limit_occurred: boolean;
+    } | null;
   };
   allsky: {
     version: string;
@@ -70,6 +89,11 @@ export interface SystemSnapshot {
     raw: unknown;
     camera: { connected: string[]; active: string | null; active_model: string | null };
   };
+}
+
+export interface AllskyDiskUsage {
+  images: number; darks: number; keograms: number;
+  startrails: number; videos: number; config: number; tmp: number;
 }
 
 export interface ImageRow {
@@ -105,6 +129,9 @@ export const api = {
   ),
   reboot: () => request<{ ok: boolean; message: string }>("/setup/reboot", { method: "POST" }),
   system: () => request<SystemSnapshot>("/system"),
+  allskyDisk: () => request<AllskyDiskUsage>("/system/allsky-disk"),
+  rebootPi: () => request<{ ok: boolean; message: string }>("/system/reboot", { method: "POST" }),
+  shutdownPi: () => request<{ ok: boolean; message: string }>("/system/shutdown", { method: "POST" }),
   messages: () => request<Array<{ type: string; timestamp: string; id: string; message: string }>>(
     "/system/messages",
   ),
