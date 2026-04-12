@@ -215,8 +215,10 @@ usermod -a -G "${REAL_GROUP}" "${SERVICE_USER}" 2>/dev/null || true
 
 cyan "==> [4/6] Installing Python web backend"
 mkdir -p "${INSTALL_PREFIX}"
-# Copy backend source.
-cp -r "${SCRIPT_DIR}/backend" "${INSTALL_PREFIX}/backend"
+# Clean copy backend source (remove old first to avoid cp -r nesting).
+rm -rf "${INSTALL_PREFIX}/backend/app" "${INSTALL_PREFIX}/backend/pyproject.toml"
+cp -r "${SCRIPT_DIR}/backend/app" "${INSTALL_PREFIX}/backend/app"
+cp "${SCRIPT_DIR}/backend/pyproject.toml" "${INSTALL_PREFIX}/backend/pyproject.toml"
 find "${INSTALL_PREFIX}/backend" -name '__pycache__' -exec rm -rf {} + 2>/dev/null || true
 
 VENV="${INSTALL_PREFIX}/backend/.venv"
@@ -238,8 +240,17 @@ green "    Python backend installed."
 # ── Step 5: React frontend ──────────────────────────────────────
 
 cyan "==> [5/6] Building React frontend"
-cp -r "${SCRIPT_DIR}/frontend" "${INSTALL_PREFIX}/frontend"
-rm -rf "${INSTALL_PREFIX}/frontend/node_modules" "${INSTALL_PREFIX}/frontend/dist"
+# Clean copy frontend source.
+rm -rf "${INSTALL_PREFIX}/frontend/src" "${INSTALL_PREFIX}/frontend/index.html"
+mkdir -p "${INSTALL_PREFIX}/frontend"
+cp -r "${SCRIPT_DIR}/frontend/src" "${INSTALL_PREFIX}/frontend/src"
+cp "${SCRIPT_DIR}/frontend/package.json" "${INSTALL_PREFIX}/frontend/package.json"
+cp "${SCRIPT_DIR}/frontend/tsconfig.json" "${INSTALL_PREFIX}/frontend/tsconfig.json"
+cp "${SCRIPT_DIR}/frontend/vite.config.ts" "${INSTALL_PREFIX}/frontend/vite.config.ts"
+cp "${SCRIPT_DIR}/frontend/tailwind.config.js" "${INSTALL_PREFIX}/frontend/tailwind.config.js"
+cp "${SCRIPT_DIR}/frontend/postcss.config.js" "${INSTALL_PREFIX}/frontend/postcss.config.js"
+cp "${SCRIPT_DIR}/frontend/index.html" "${INSTALL_PREFIX}/frontend/index.html"
+rm -rf "${INSTALL_PREFIX}/frontend/dist"
 pushd "${INSTALL_PREFIX}/frontend" >/dev/null
 npm install 2>&1 | tail -5
 npm run build 2>&1 | tail -5
