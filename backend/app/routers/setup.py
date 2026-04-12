@@ -10,7 +10,10 @@ from typing import Any
 
 from fastapi import APIRouter, Body, HTTPException
 
-from app.allsky.camera import detect_cameras, setup_initial_config
+from app.allsky.camera import (
+    CAMERA_OVERLAYS, detect_cameras, get_camera_overlay_status,
+    install_camera_overlay, setup_initial_config,
+)
 from app.allsky.service import systemctl
 from app.allsky.settings import load_values
 from app.allsky.status import read_status
@@ -70,6 +73,27 @@ async def configure(body: dict[str, Any] = Body(...)):
             result["service_started"] = False
             result["service_error"] = str(e)
 
+    return result
+
+
+@router.get("/camera-overlays")
+async def camera_overlays():
+    """List known camera sensor overlays and their install status."""
+    results = {}
+    for sensor in CAMERA_OVERLAYS:
+        results[sensor] = get_camera_overlay_status(sensor)
+    return {"overlays": results}
+
+
+@router.post("/install-overlay")
+async def install_overlay(body: dict[str, Any] = Body(...)):
+    """Install a camera dtoverlay in boot config. Requires reboot after."""
+    sensor = body.get("sensor", "")
+    if not sensor:
+        raise HTTPException(400, "sensor field required")
+    result = await install_camera_overlay(sensor)
+    if not result.get("ok"):
+        raise HTTPException(400, result.get("error", "failed"))
     return result
 
 

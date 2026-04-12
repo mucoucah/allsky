@@ -127,6 +127,12 @@ export const api = {
   enableCamera: () => request<{ results: unknown[]; needs_reboot: boolean; message: string }>(
     "/setup/enable-camera", { method: "POST" },
   ),
+  cameraOverlays: () => request<{
+    overlays: Record<string, { known: boolean; sensor: string; overlay: string; label: string; installed: boolean }>;
+  }>("/setup/camera-overlays"),
+  installOverlay: (sensor: string) => request<{
+    ok: boolean; needs_reboot: boolean; message: string; already_installed?: boolean;
+  }>("/setup/install-overlay", { method: "POST", json: { sensor } }),
   reboot: () => request<{ ok: boolean; message: string }>("/setup/reboot", { method: "POST" }),
   system: () => request<SystemSnapshot>("/system"),
   allskyDisk: () => request<AllskyDiskUsage>("/system/allsky-disk"),
