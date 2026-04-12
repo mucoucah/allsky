@@ -288,8 +288,10 @@ if [[ -f "${INSTALL_PREFIX}/config/settings.json" ]]; then
   # Copy web config back to allsky home so camera daemon gets latest settings.
   cp "${INSTALL_PREFIX}/config/settings.json" "${ALLSKY_HOME}/config/settings.json" 2>/dev/null || true
 fi
-# Always refresh status.
-echo '{"status":"Not configured"}' > "${ALLSKY_HOME}/config/status.json"
+# Set status only if not already configured.
+if [[ ! -f "${ALLSKY_HOME}/config/status.json" ]]; then
+  echo '{"status":"Not configured"}' > "${ALLSKY_HOME}/config/status.json"
+fi
 
 # Always update allsky.service to ensure correct ALLSKY_HOME path.
 # A previous install may have written a stale path.

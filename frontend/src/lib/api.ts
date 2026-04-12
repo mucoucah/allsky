@@ -86,6 +86,7 @@ export interface SystemSnapshot {
   allsky: {
     version: string;
     status: string;
+    service_active?: boolean;
     raw: unknown;
     camera: { connected: string[]; active: string | null; active_model: string | null };
   };
