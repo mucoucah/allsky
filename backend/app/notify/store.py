@@ -140,3 +140,21 @@ def load_focus_config() -> dict:
 
 def save_focus_config(cfg: dict) -> None:
     _save("focus_config.json", cfg)
+
+
+# ── rain config ──────────────────────────────────────────────────
+
+_DEFAULT_RAIN_CFG: dict = {
+    "enabled": False,
+    "poll_interval_minutes": 5,
+    "confidence_threshold": 0.4,
+    "include_snapshot": True,
+}
+
+
+def load_rain_config() -> dict:
+    return _load("rain_config.json", {**_DEFAULT_RAIN_CFG})
+
+
+def save_rain_config(cfg: dict) -> None:
+    _save("rain_config.json", cfg)

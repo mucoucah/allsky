@@ -236,6 +236,15 @@ export const api = {
     request<{ ok: boolean }>("/notifications/focus/config", { method: "PUT", json: cfg }),
   calibrateFocus: () =>
     request<{ ok: boolean; baseline_sharpness: number }>("/notifications/focus/calibrate", { method: "POST" }),
+  // Rain detection
+  rainConfig: () => request<RainConfig>("/notifications/rain/config"),
+  setRainConfig: (cfg: Partial<RainConfig>) =>
+    request<{ ok: boolean }>("/notifications/rain/config", { method: "PUT", json: cfg }),
+  detectRainNow: () => request<{
+    rain_detected: boolean; confidence: number; droplet_count: number;
+    contrast_score: number; message: string;
+  }>("/notifications/rain/detect-now", { method: "POST" }),
+
   currentFocus: () => request<{
     score: number | null; baseline: number | null; threshold: number | null; status: string;
   }>("/notifications/focus/current"),
@@ -266,6 +275,13 @@ export interface FocusConfig {
   baseline_sharpness: number | null;
   threshold_pct: number;
   consecutive_failures_to_alert: number;
+  include_snapshot: boolean;
+}
+
+export interface RainConfig {
+  enabled: boolean;
+  poll_interval_minutes: number;
+  confidence_threshold: number;
   include_snapshot: boolean;
 }
 

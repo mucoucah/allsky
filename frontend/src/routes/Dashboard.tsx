@@ -1,6 +1,7 @@
+import { useState, useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import { Wrench, Play, Square, Zap, AlertTriangle } from "lucide-react";
+import { Wrench, Play, Square, Zap, AlertTriangle, CloudRain, X } from "lucide-react";
 import { api, fileUrl } from "../lib/api";
 import { useLiveSocket } from "../hooks/useLiveSocket";
 import { Tile } from "../components/Tile";
@@ -25,6 +26,15 @@ function fmtUptime(s: number): string {
 export default function Dashboard() {
   const qc = useQueryClient();
   const { frameUrl, meta, connected } = useLiveSocket();
+  const [fullscreen, setFullscreen] = useState(false);
+
+  // Close fullscreen on Escape.
+  useEffect(() => {
+    if (!fullscreen) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setFullscreen(false); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [fullscreen]);
 
   const serviceAction = useMutation({
     mutationFn: api.serviceControl,
@@ -88,10 +98,12 @@ export default function Dashboard() {
             {meta?.mtime ?? "—"}
           </div>
         </div>
-        <div className="aspect-video w-full bg-bg-base rounded-xl overflow-hidden border border-bg-raised flex items-center justify-center">
+        <div
+          className="aspect-video w-full bg-bg-base rounded-xl overflow-hidden border border-bg-raised flex items-center justify-center cursor-pointer"
+          onClick={() => setFullscreen(true)}
+          title="Click for fullscreen"
+        >
           {frameUrl ? (
-            // The browser swap is single-frame: we never composite or polyfill
-            // — that's the whole point of going binary-WS.
             <img
               src={frameUrl}
               alt="Latest sky frame"
@@ -284,6 +296,29 @@ export default function Dashboard() {
           <div className="text-ink-dim text-sm">No messages from Allsky.</div>
         )}
       </section>
+
+      {/* Fullscreen image overlay */}
+      {fullscreen && (
+        <div
+          className="fixed inset-0 z-50 bg-black flex items-center justify-center cursor-pointer"
+          onClick={() => setFullscreen(false)}
+        >
+          <button
+            onClick={() => setFullscreen(false)}
+            className="absolute top-4 right-4 p-2 rounded-full bg-white/10 text-white z-10 hover:bg-white/20"
+          >
+            <X size={24} />
+          </button>
+          <img
+            src={frameUrl || fileUrl.liveLatest()}
+            alt="Fullscreen sky view"
+            className="max-h-screen max-w-screen object-contain"
+          />
+          <div className="absolute bottom-4 text-center text-sm text-white/50 font-mono">
+            {meta?.mtime ?? ""} &mdash; Press Escape to close
+          </div>
+        </div>
+      )}
     </div>
   );
 }
