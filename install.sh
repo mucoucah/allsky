@@ -94,6 +94,16 @@ if [[ ! -f "${ALLSKY_HOME}/bin/capture_RPi" && -f "${ALLSKY_HOME}/src/Makefile" 
   apt-get install -y -qq libopencv-dev libusb-dev libusb-1.0-0-dev \
     pkg-config g++ make git 2>/dev/null || true
 
+  # sunwait is a git submodule in upstream allsky — clone it if missing.
+  if [[ ! -f "${ALLSKY_HOME}/src/sunwait-src/sunwait.c" ]]; then
+    cyan "    Cloning sunwait (sunrise/sunset calculator)..."
+    rm -rf "${ALLSKY_HOME}/src/sunwait-src"
+    git clone --depth 1 https://github.com/risacher/sunwait.git \
+      "${ALLSKY_HOME}/src/sunwait-src" 2>&1 | tail -2 || {
+      yellow "    sunwait clone failed (non-fatal — day/night detection may not work)"
+    }
+  fi
+
   cyan "    Compiling capture binary (this takes a few minutes)..."
   pushd "${ALLSKY_HOME}/src" >/dev/null
   make -j"$(nproc)" all 2>&1 | tail -10 || {
