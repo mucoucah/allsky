@@ -16,6 +16,32 @@ from .paths import paths
 
 log = logging.getLogger(__name__)
 
+
+def _lookup_camera_model(sensor: str) -> str:
+    """Look up the full camera model name from RPi_cameraInfo.txt.
+
+    The camera info file has lines like:
+        camera\timx290\t0\timx290 60.00 fps\t...
+
+    The sensor is in column 2, the model is in column 4.
+    allsky.sh expects cameramodel to match column 4.
+    """
+    p = paths()
+    for info_path in (p.config / "RPi_cameraInfo.txt", p.web_config / "RPi_cameraInfo.txt"):
+        try:
+            if not info_path.exists():
+                continue
+            for line in info_path.read_text().splitlines():
+                if not line.startswith("camera\t"):
+                    continue
+                parts = line.split("\t")
+                if len(parts) >= 4 and parts[1].strip() == sensor:
+                    return parts[3].strip()  # e.g. "imx290 60.00 fps"
+        except OSError:
+            continue
+    # Fallback: return sensor name as-is.
+    return sensor
+
 # Known camera overlays for /boot/firmware/config.txt (or /boot/config.txt).
 # These sensors need a dtoverlay entry to be detected by libcamera.
 CAMERA_OVERLAYS: dict[str, dict[str, Any]] = {
@@ -189,6 +215,14 @@ async def setup_initial_config(
 
     # Load existing or start fresh.
     settings = load_values()
+
+    # Look up the full model name from RPi_cameraInfo.txt.
+    # rpicam-hello returns just the sensor name (e.g. "imx290"), but allsky.sh
+    # expects the full model string (e.g. "imx290 60.00 fps") from the camera info file.
+    if camera_type == "RPi" and camera_model:
+        full_model = _lookup_camera_model(camera_model)
+        log.info("camera model lookup: sensor=%s -> model=%s", camera_model, full_model)
+        camera_model = full_model
 
     settings.update({
         "cameratype": camera_type,

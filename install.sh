@@ -101,30 +101,50 @@ green "    OS packages done."
 
 cyan "==> [2/6] Setting up Allsky camera backend"
 
-# Compile the capture binary if not already built.
-if [[ ! -f "${ALLSKY_HOME}/bin/capture_RPi" && -f "${ALLSKY_HOME}/src/Makefile" ]]; then
-  cyan "    Installing build dependencies (libopencv, libusb)..."
-  apt-get install -y -qq libopencv-dev libusb-dev libusb-1.0-0-dev \
-    pkg-config g++ make git 2>/dev/null || true
+# Compile the capture binary if not already built, or if header needs regeneration.
+if [[ -f "${ALLSKY_HOME}/src/Makefile" ]]; then
 
-  # sunwait is a git submodule in upstream allsky — clone it if missing.
-  if [[ ! -f "${ALLSKY_HOME}/src/sunwait-src/sunwait.c" ]]; then
-    cyan "    Cloning sunwait (sunrise/sunset calculator)..."
-    rm -rf "${ALLSKY_HOME}/src/sunwait-src"
-    git clone --depth 1 https://github.com/risacher/sunwait.git \
-      "${ALLSKY_HOME}/src/sunwait-src" 2>&1 | tail -2 || {
-      yellow "    sunwait clone failed (non-fatal — day/night detection may not work)"
-    }
+  # Generate allsky_common.h from .repo template, replacing XX_ placeholders
+  # with actual file paths.  Without this, the capture binary looks for files
+  # called "XX_ALLSKY_HOME_XX" etc. instead of real paths.
+  HEADER_REPO="${ALLSKY_HOME}/src/include/allsky_common.h.repo"
+  HEADER_OUT="${ALLSKY_HOME}/src/include/allsky_common.h"
+  if [[ -f "${HEADER_REPO}" ]]; then
+    cyan "    Generating allsky_common.h with correct paths..."
+    sed \
+      -e "s|XX_ALLSKY_HOME_XX|${ALLSKY_HOME}|g" \
+      -e "s|XX_CONNECTED_CAMERAS_FILE_XX|${ALLSKY_HOME}/config/connected_cameras.txt|g" \
+      -e "s|XX_RPI_CAMERA_INFO_FILE_XX|${ALLSKY_HOME}/config/RPi_cameraInfo.txt|g" \
+      "${HEADER_REPO}" > "${HEADER_OUT}"
+    # Force recompile since header changed.
+    rm -f "${ALLSKY_HOME}/src/"*.o 2>/dev/null || true
+    rm -f "${ALLSKY_HOME}/bin/capture_RPi" 2>/dev/null || true
   fi
 
-  cyan "    Compiling capture binary (this takes a few minutes)..."
-  pushd "${ALLSKY_HOME}/src" >/dev/null
-  make -j"$(nproc)" all 2>&1 | tail -10 || {
-    yellow "    Capture binary build skipped or failed."
-    yellow "    The web UI will still work. You can retry later from the System page."
-  }
-  popd >/dev/null
-fi
+  if [[ ! -f "${ALLSKY_HOME}/bin/capture_RPi" ]]; then
+    cyan "    Installing build dependencies (libopencv, libusb)..."
+    apt-get install -y -qq libopencv-dev libusb-dev libusb-1.0-0-dev \
+      pkg-config g++ make git 2>/dev/null || true
+
+    # sunwait is a git submodule in upstream allsky — clone it if missing.
+    if [[ ! -f "${ALLSKY_HOME}/src/sunwait-src/sunwait.c" ]]; then
+      cyan "    Cloning sunwait (sunrise/sunset calculator)..."
+      rm -rf "${ALLSKY_HOME}/src/sunwait-src"
+      git clone --depth 1 https://github.com/risacher/sunwait.git \
+        "${ALLSKY_HOME}/src/sunwait-src" 2>&1 | tail -2 || {
+        yellow "    sunwait clone failed (non-fatal — day/night detection may not work)"
+      }
+    fi
+
+    cyan "    Compiling capture binary (this takes a few minutes)..."
+    pushd "${ALLSKY_HOME}/src" >/dev/null
+    make -j"$(nproc)" all 2>&1 | tail -10 || {
+      yellow "    Capture binary build skipped or failed."
+      yellow "    The web UI will still work. You can retry later from the System page."
+    }
+    popd >/dev/null
+  fi  # end capture_RPi build
+fi  # end Makefile exists
 
 # Replace PHP convertJSON with Python version (eliminates PHP dependency).
 if [[ -f "${ALLSKY_HOME}/scripts/convertJSON.py" ]]; then
