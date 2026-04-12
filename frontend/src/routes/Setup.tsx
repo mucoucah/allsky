@@ -39,8 +39,8 @@ export default function Setup() {
     mutationFn: () => {
       const cam = cameras?.cameras[selectedCamera];
       return api.configure({
-        camera_type: "RPi",
-        camera_model: cam?.model ?? "",
+        camera_type: status?.camera_type || "RPi",
+        camera_model: cam?.model || status?.camera_model || "",
         camera_number: cam?.index ?? 0,
         latitude: lat,
         longitude: lon,

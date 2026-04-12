@@ -46,52 +46,50 @@ export function SettingField({ def, value, onChange, disabled, dirty }: Props) {
 
   return (
     <div className="flex flex-col gap-1">
-      <label htmlFor={id} className="flex items-center justify-between gap-3">
-        <span className="text-ink text-sm">
+      {/* Row 1: Label + Input on same line */}
+      <div className="flex items-center gap-3">
+        <label htmlFor={id} className="text-ink text-sm font-medium shrink-0 min-w-[180px]">
           {def.label}
           {def.action === "reload" && (
             <span
-              className="ml-2 text-[10px] uppercase tracking-wide text-warn"
+              className="ml-1.5 text-[10px] uppercase tracking-wide text-warn"
               title="Changing this restarts Allsky"
             >
               restart
             </span>
           )}
-          {dirty && <span className="ml-2 text-[10px] text-accent">&#9679;</span>}
-        </span>
-      </label>
-
-      {renderWidget(def, value, onChange, disabled, id, `${baseInput} ${borderClass}`)}
-
-      {/* Default / recommended value */}
-      {hasDefault && def.type !== "boolean" && (
-        <div className="text-[11px] text-ink-dim flex items-center gap-1">
-          <span>Default:</span>
+          {dirty && <span className="ml-1 text-[10px] text-accent">&#9679;</span>}
+        </label>
+        <div className="flex-1 max-w-md">
+          {renderWidget(def, value, onChange, disabled, id, `${baseInput} ${borderClass}`)}
+        </div>
+        {/* Default reset button inline */}
+        {hasDefault && def.type !== "boolean" && (
           <button
             type="button"
-            className={`font-mono px-1 rounded ${
+            className={`text-[11px] shrink-0 font-mono px-1.5 py-0.5 rounded ${
               isAtDefault
                 ? "text-emerald-400"
                 : "text-accent hover:underline cursor-pointer"
             }`}
-            title={isAtDefault ? "Currently at default" : "Click to reset to default"}
+            title={isAtDefault ? "At default" : `Reset to ${def.default}`}
             onClick={() => { if (!isAtDefault && !disabled) onChange(def.default); }}
             disabled={disabled || isAtDefault}
           >
-            {String(def.default)}
+            {isAtDefault ? "\u2713" : `\u21ba ${String(def.default)}`}
           </button>
-          {isAtDefault && <span className="text-emerald-400 text-[10px]">&#10003;</span>}
-        </div>
-      )}
+        )}
+      </div>
 
+      {/* Row 2: Description + errors */}
       {def.description && (
         <div
-          className="text-xs text-ink-dim [&_a]:text-accent [&_a]:underline"
+          className="text-xs text-ink-dim ml-[180px] pl-3 [&_a]:text-accent [&_a]:underline"
           dangerouslySetInnerHTML={{ __html: fixDocLinks(def.description) }}
         />
       )}
       {errors.length > 0 && (
-        <div className="text-xs text-err">{errors.join(", ")}</div>
+        <div className="text-xs text-err ml-[180px] pl-3">{errors.join(", ")}</div>
       )}
     </div>
   );
