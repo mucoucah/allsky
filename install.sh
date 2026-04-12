@@ -188,8 +188,15 @@ fi
 REAL_USER="${SUDO_USER:-pi}"
 REAL_GROUP="$(id -gn "${REAL_USER}" 2>/dev/null || echo "${REAL_USER}")"
 chown -R "${REAL_USER}:${REAL_GROUP}" "${ALLSKY_HOME}"
-# Web UI service user needs write access to tmp/
+# Web UI service user needs write access to tmp/ and read access to config/.
 chmod 775 "${ALLSKY_HOME}/tmp" 2>/dev/null || true
+# Ensure the allskyweb user can traverse into ALLSKY_HOME to read configs.
+# Home directories on some Pi OS versions default to 750, blocking other users.
+chmod 755 "${ALLSKY_HOME}" 2>/dev/null || true
+chmod -R g+rX "${ALLSKY_HOME}/config" 2>/dev/null || true
+# Also ensure parent dirs are traversable (e.g. /home/username).
+PARENT_DIR="$(dirname "${ALLSKY_HOME}")"
+chmod o+rx "${PARENT_DIR}" 2>/dev/null || true
 
 green "    Allsky backend setup done."
 
