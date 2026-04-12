@@ -30,6 +30,26 @@ async def system_status():
     except Exception as e:
         log.exception("allsky status failed")
         allsky = {"version": "unknown", "status": "Error", "camera": {}, "error": str(e)}
+
+    # Override status with actual systemd service state — status.json is often stale.
+    try:
+        svc = await systemctl("status")
+        stdout = svc.get("stdout", "")
+        if "active (running)" in stdout.lower():
+            allsky["status"] = "Running"
+            allsky["service_active"] = True
+        elif "inactive" in stdout.lower() or "dead" in stdout.lower():
+            allsky["service_active"] = False
+            if allsky["status"] in ("Not configured", "Unknown"):
+                allsky["status"] = "Stopped"
+        elif "failed" in stdout.lower():
+            allsky["status"] = "Error"
+            allsky["service_active"] = False
+        else:
+            allsky["service_active"] = False
+    except Exception:
+        allsky["service_active"] = False
+
     return {"host": host, "allsky": allsky}
 
 

@@ -176,6 +176,17 @@ export default function MaskEditor() {
 
   return (
     <div className="flex flex-col gap-4">
+      {/* Instructions */}
+      <div className="card bg-accent/5 border-accent/20">
+        <h2 className="text-lg font-semibold mb-2">Mask Editor</h2>
+        <div className="text-sm text-ink-muted space-y-1">
+          <p><strong>Paint areas to exclude</strong> from capture (e.g. trees, buildings, horizon obstructions).</p>
+          <p>Painted (white) areas will be <strong>blocked/masked out</strong> in captured images. Use <strong>Draw</strong> to paint exclusion zones and <strong>Erase</strong> to remove them.</p>
+          <p>The mask is applied automatically by Allsky during image processing. After saving, restart the camera for changes to take effect.</p>
+          <p className="text-xs text-ink-dim">Tip: Use a large brush for broad areas. The mask is saved at the camera's native resolution.</p>
+        </div>
+      </div>
+
       {/* Toolbar */}
       <div className="card flex flex-wrap items-center gap-3">
         <div className="flex gap-1">

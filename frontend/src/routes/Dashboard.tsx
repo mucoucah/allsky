@@ -133,7 +133,7 @@ export default function Dashboard() {
             </div>
             {/* Camera controls */}
             <div className="flex gap-2 mt-1 pt-2 border-t border-bg-raised">
-              {sys.allsky.status.toLowerCase().includes("running") ? (
+              {sys.allsky.service_active ? (
                 <>
                   <button
                     onClick={() => serviceAction.mutate("restart")}
