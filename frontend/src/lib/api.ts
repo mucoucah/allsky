@@ -95,6 +95,10 @@ export const api = {
     request<{ verb: string; exit_code: number; stdout: string; stderr: string }>(
       `/system/service/${verb}`, { method: "POST" },
     ),
+  logTail: async (lines: number = 200): Promise<string> => {
+    const res = await fetch(`${base}/logs/allsky?lines=${lines}`);
+    return res.text();
+  },
 
   settingsSchema: () => request<SettingsSchema>("/settings/schema"),
   settingsAudit: () => request<Array<{

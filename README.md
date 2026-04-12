@@ -1,8 +1,144 @@
 # allsky-web
 
-A modern web interface for the [Allsky](https://github.com/AllskyTeam/allsky)
-sky-camera project. Drop-in replacement for the legacy PHP UI — leaves the
-upstream capture pipeline (`allsky.sh`, `capture_RPi`, `saveImage.sh`,
+A modern, mobile-first web interface for the [Allsky](https://github.com/AllskyTeam/allsky) sky camera project. Replaces the legacy PHP WebUI while keeping the core capture backend untouched.
+
+## Features
+
+- **Live view** via WebSocket push (no polling) with connection status
+- **Dashboard** with CPU temp, disk, memory, load, camera status, focus quality
+- **Image gallery** with date filtering, sort by EXIF metadata, lightbox with keyboard nav
+- **Settings editor** with schema-driven forms, validation, dependency awareness, audit trail
+- **Visual mask editor** (Konva) with draw/erase, undo/redo, brush size, opacity, load existing masks
+- **Keograms & startrails** viewer with full-screen overlay and arrow-key navigation
+- **Meteor/streak detection** (Canny + Hough + satellite discrimination) with auto-alerts
+- **Focus monitoring** (variance of Laplacian) with calibration and hysteresis
+- **Multi-channel notifications**: Telegram, Discord, Email, ntfy.sh, webhook
+- **System control**: start/stop/restart Allsky, log tail viewer
+- **Alerts panel** with acknowledgement
+- **Dark theme** designed for nighttime use (amber accent to preserve night vision)
+
+## Tech stack
+
+| Layer | Technology |
+|-------|-----------|
+| Backend | Python 3.11+, FastAPI, uvicorn, aiosqlite |
+| Frontend | React 18, Vite, Tailwind CSS, react-konva |
+| Detection | OpenCV (Canny/Hough), numpy |
+| Notifications | httpx (async HTTP), smtplib |
+| Database | SQLite (metadata, alerts, audit) |
+
+## Requirements
+
+- Raspberry Pi 3B or newer (64-bit OS recommended)
+- Allsky v2024.x installed and capturing images
+- Python 3.11+
+- Node.js 18+ (installer will fetch if missing)
+
+## Installation
+
+```bash
+# Clone the repo
+git clone https://github.com/mucoucah/allsky.git allsky-web
+cd allsky-web
+
+# Run the installer (installs to /opt/allsky-web)
+sudo ./install.sh
+
+# Start the service
+sudo systemctl start allsky-web
+
+# Open in browser
+# http://<pi-ip>:8000
+```
+
+The installer will:
+1. Create an `allskyweb` service user
+2. Install Python/Node dependencies
+3. Build the React frontend
+4. Create a systemd service
+5. Generate a session secret
+
+### Environment variables
+
+Edit `/etc/allsky-web/env` to configure:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `ALLSKY_HOME` | `/home/pi/allsky` | Path to upstream Allsky |
+| `ALLSKY_WEB_HOST` | `0.0.0.0` | Listen address |
+| `ALLSKY_WEB_PORT` | `8000` | Listen port |
+| `ALLSKY_WEB_USER` | *(empty)* | Username for auth (empty = no auth) |
+| `ALLSKY_WEB_PASS_HASH` | *(empty)* | bcrypt hash of password |
+| `ALLSKY_WEB_SECRET` | *(auto-generated)* | Session signing key |
+
+To enable authentication:
+```bash
+# Generate a password hash
+python3 -c "from passlib.hash import bcrypt; print(bcrypt.hash('your-password'))"
+
+# Add to /etc/allsky-web/env
+ALLSKY_WEB_USER=admin
+ALLSKY_WEB_PASS_HASH=$2b$12$...
+```
+
+## Development
+
+```bash
+# Backend (auto-reload)
+cd backend
+python3 -m venv .venv && . .venv/bin/activate
+pip install -e .
+uvicorn app.main:app --reload --host 0.0.0.0
+
+# Frontend (Vite dev server, proxies /api to :8000)
+cd frontend
+npm install
+npm run dev
+```
+
+## Notification setup
+
+Go to **Notifications** in the sidebar:
+
+1. Click **Add channel** and configure Telegram/Discord/Email/ntfy/webhook
+2. Click the test button to verify
+3. Enable **Meteor detection** and adjust the minimum streak length
+4. Enable **Focus monitoring** and click "Set current as in-focus baseline"
+
+Alerts are deduplicated per day and dispatched to all enabled channels.
+
+## Architecture
+
+```
+backend/
+  app/
+    allsky/    # filesystem adapters (paths, settings, status, images, masks)
+    notify/    # channels, meteor detector, focus analyzer, watchers
+    routers/   # FastAPI endpoints
+    ws/        # WebSocket broadcaster
+    main.py    # app factory + lifespan
+frontend/
+  src/
+    routes/    # Dashboard, Gallery, Settings, MaskEditor, Keograms, etc.
+    components/# Layout, Tile, StatusPill, SettingField
+    hooks/     # useLiveSocket, useElementSize
+    lib/       # api client, depends parser, validator
+deploy/        # systemd unit, sudoers, lighttpd config
+```
+
+The backend **never modifies** the Allsky capture pipeline. It reads/writes the same files Allsky uses (`config/settings.json`, `config/overlay/images/*.png`, `tmp/image.jpg`, etc.) and delegates setting changes to Allsky's own `scripts/makeChanges.sh`.
+
+## Uninstall
+
+```bash
+sudo ./uninstall.sh
+```
+
+Removes the service, user, installed files, and data directory. Does not touch upstream Allsky.
+
+## License
+
+Same as the upstream Allsky project (GPL-3.0).
 `flow-runner.py`) completely untouched and integrates purely through the same
 filesystem locations Allsky already reads and writes.
 
