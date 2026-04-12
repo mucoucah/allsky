@@ -75,10 +75,16 @@ def detect(
         processed = processed * (inv_cloud // 255)
 
     # Apply user mask if provided.
+    # Convention: white = EXCLUDED areas (painted in the mask editor).
+    # We invert it so white becomes black (blocked) for bitwise_and.
     if mask_path and mask_path.exists():
         mask_img = cv2.imread(str(mask_path), cv2.IMREAD_GRAYSCALE)
-        if mask_img is not None and mask_img.shape == processed.shape:
-            processed = cv2.bitwise_and(processed, processed, mask=mask_img)
+        if mask_img is not None:
+            if mask_img.shape != processed.shape:
+                mask_img = cv2.resize(mask_img, (processed.shape[1], processed.shape[0]))
+            # Invert: painted white areas become black (excluded).
+            mask_inv = cv2.bitwise_not(mask_img)
+            processed = cv2.bitwise_and(processed, processed, mask=mask_inv)
 
     # Hough Line Transform.
     lines_raw = cv2.HoughLinesP(
