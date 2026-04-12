@@ -200,13 +200,26 @@ fi
 REAL_USER="${SUDO_USER:-pi}"
 REAL_GROUP="$(id -gn "${REAL_USER}" 2>/dev/null || echo "${REAL_USER}")"
 chown -R "${REAL_USER}:${REAL_GROUP}" "${ALLSKY_HOME}"
-# Web UI service user needs write access to tmp/ and read access to config/.
-chmod 775 "${ALLSKY_HOME}/tmp" 2>/dev/null || true
-# Ensure the allskyweb user can traverse into ALLSKY_HOME to read configs.
-# Home directories on some Pi OS versions default to 750, blocking other users.
+
+# Web UI service user needs read access to config/ and write access to tmp/.
+# We use world-readable (o+r) on config files because group membership alone
+# is unreliable — the service user's login group may differ, and supplementary
+# groups aren't always picked up by systemd without a reboot.
 chmod 755 "${ALLSKY_HOME}" 2>/dev/null || true
-chmod -R g+rX "${ALLSKY_HOME}/config" 2>/dev/null || true
-# Also ensure parent dirs are traversable (e.g. /home/username).
+chmod 775 "${ALLSKY_HOME}/tmp" 2>/dev/null || true
+
+# Make config directory and all files world-readable.
+chmod -R o+rX "${ALLSKY_HOME}/config" 2>/dev/null || true
+# Explicitly ensure key files are readable.
+chmod o+r "${ALLSKY_HOME}/config/settings.json" 2>/dev/null || true
+chmod o+r "${ALLSKY_HOME}/config/options.json" 2>/dev/null || true
+chmod o+r "${ALLSKY_HOME}/config/status.json" 2>/dev/null || true
+
+# Also make images, html (keograms/startrails/videos) readable.
+chmod -R o+rX "${ALLSKY_HOME}/images" 2>/dev/null || true
+chmod -R o+rX "${ALLSKY_HOME}/html" 2>/dev/null || true
+
+# Ensure parent dirs are traversable (e.g. /home/username).
 PARENT_DIR="$(dirname "${ALLSKY_HOME}")"
 chmod o+rx "${PARENT_DIR}" 2>/dev/null || true
 
