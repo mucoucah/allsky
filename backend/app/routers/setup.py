@@ -44,6 +44,8 @@ async def setup_status():
         "allsky_status": status.get("status", "Unknown"),
         "camera_type": settings.get("cameratype"),
         "camera_model": settings.get("cameramodel"),
+        "latitude": settings.get("latitude", ""),
+        "longitude": settings.get("longitude", ""),
         "service_active": service_active,
     }
 
