@@ -302,7 +302,7 @@ for cfg in options.json settings.json status.json; do
     cp "${ALLSKY_HOME}/config/${cfg}" "${WEB_CONFIG}/${cfg}"
   fi
 done
-chown -R "${SERVICE_USER}:${SERVICE_USER}" "${WEB_CONFIG}"
+chown -R "${REAL_USER}:${REAL_GROUP}" "${WEB_CONFIG}"
 green "    Config files synced to ${WEB_CONFIG}."
 
 # ── Step 5: React frontend ──────────────────────────────────────
@@ -331,7 +331,7 @@ green "    Frontend built."
 
 # Set ownership.
 mkdir -p "${DATA_DIR}"
-chown -R "${SERVICE_USER}:${SERVICE_USER}" "${DATA_DIR}" "${INSTALL_PREFIX}"
+chown -R "${REAL_USER}:${REAL_GROUP}" "${DATA_DIR}" "${INSTALL_PREFIX}"
 
 # ── Step 6: Services + config ───────────────────────────────────
 
@@ -352,7 +352,7 @@ ALLSKY_WEB_USER=
 ALLSKY_WEB_PASS_HASH=
 ENVEOF
   chmod 640 "${ENV_FILE}"
-  chown root:"${SERVICE_USER}" "${ENV_FILE}"
+  chown root:"${REAL_GROUP}" "${ENV_FILE}"
 else
   sed -i "s|^ALLSKY_HOME=.*|ALLSKY_HOME=${ALLSKY_HOME}|" "${ENV_FILE}"
   # Ensure ALLSKY_WEB_CONFIG is present (may be missing from older installs).
@@ -364,6 +364,9 @@ else
 fi
 
 # Web UI systemd service.
+# Run as the REAL user (not allskyweb) to avoid all home directory permission
+# issues. On Bookworm, home dirs are 700 and PAM resets chmod on login.
+# Running as the file owner eliminates the problem entirely.
 cat >/etc/systemd/system/allsky-web.service <<SVCEOF
 [Unit]
 Description=Allsky modern web interface
@@ -372,8 +375,8 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User=${SERVICE_USER}
-Group=${SERVICE_USER}
+User=${REAL_USER}
+Group=${REAL_GROUP}
 EnvironmentFile=-${ENV_FILE}
 WorkingDirectory=${INSTALL_PREFIX}/backend
 ExecStart=${INSTALL_PREFIX}/backend/.venv/bin/uvicorn app.main:app \
@@ -386,16 +389,16 @@ RestartSec=3
 WantedBy=multi-user.target
 SVCEOF
 
-# Sudoers — allow web UI to control services, enable camera, reboot, and shutdown.
+# Sudoers — allow web UI user to control services, enable camera, reboot, and shutdown.
 cat >/etc/sudoers.d/allsky-web <<SUDOEOF
-${SERVICE_USER} ALL=(root) NOPASSWD: /usr/bin/systemctl start allsky.service
-${SERVICE_USER} ALL=(root) NOPASSWD: /usr/bin/systemctl stop allsky.service
-${SERVICE_USER} ALL=(root) NOPASSWD: /usr/bin/systemctl restart allsky.service
-${SERVICE_USER} ALL=(root) NOPASSWD: /usr/bin/raspi-config nonint *
-${SERVICE_USER} ALL=(root) NOPASSWD: /usr/sbin/reboot
-${SERVICE_USER} ALL=(root) NOPASSWD: /usr/sbin/shutdown -h now
-${SERVICE_USER} ALL=(root) NOPASSWD: /usr/bin/tee /boot/config.txt
-${SERVICE_USER} ALL=(root) NOPASSWD: /usr/bin/tee /boot/firmware/config.txt
+${REAL_USER} ALL=(root) NOPASSWD: /usr/bin/systemctl start allsky.service
+${REAL_USER} ALL=(root) NOPASSWD: /usr/bin/systemctl stop allsky.service
+${REAL_USER} ALL=(root) NOPASSWD: /usr/bin/systemctl restart allsky.service
+${REAL_USER} ALL=(root) NOPASSWD: /usr/bin/raspi-config nonint *
+${REAL_USER} ALL=(root) NOPASSWD: /usr/sbin/reboot
+${REAL_USER} ALL=(root) NOPASSWD: /usr/sbin/shutdown -h now
+${REAL_USER} ALL=(root) NOPASSWD: /usr/bin/tee /boot/config.txt
+${REAL_USER} ALL=(root) NOPASSWD: /usr/bin/tee /boot/firmware/config.txt
 SUDOEOF
 chmod 0440 /etc/sudoers.d/allsky-web
 visudo -cf /etc/sudoers.d/allsky-web >/dev/null 2>&1 || true
@@ -403,23 +406,7 @@ visudo -cf /etc/sudoers.d/allsky-web >/dev/null 2>&1 || true
 systemctl daemon-reload
 systemctl enable allsky-web.service
 
-# Final permission fix — ensure allskyweb can traverse ALLSKY_HOME.
-# On Bookworm, home dirs are 700 and PAM resets them on login.
-# We set o+rx on the allsky dir and its parent (the user's home).
-PARENT_DIR="$(dirname "${ALLSKY_HOME}")"
-chmod o+rx "${PARENT_DIR}" 2>/dev/null || true
-chmod o+rx "${ALLSKY_HOME}" 2>/dev/null || true
-chmod -R o+rX "${ALLSKY_HOME}/images" 2>/dev/null || true
-chmod -R o+rX "${ALLSKY_HOME}/html" 2>/dev/null || true
-chmod -R o+rX "${ALLSKY_HOME}/config" 2>/dev/null || true
-chmod o+rwx "${ALLSKY_HOME}/tmp" 2>/dev/null || true
-# The web user needs WRITE access to settings.json so settings changes
-# propagate to the camera daemon. Also status.json for status updates.
-chmod o+rw "${ALLSKY_HOME}/config/settings.json" 2>/dev/null || true
-chmod o+rw "${ALLSKY_HOME}/config/status.json" 2>/dev/null || true
-# Ensure scripts dir is accessible (allsky.sh sources from there).
-chmod -R o+rX "${ALLSKY_HOME}/scripts" 2>/dev/null || true
-green "    Permissions set on ALLSKY_HOME."
+# No chmod needed — web service now runs as the same user who owns ALLSKY_HOME.
 
 # Start the web UI.
 systemctl restart allsky-web.service 2>/dev/null || systemctl start allsky-web.service || true
@@ -433,7 +420,7 @@ if sudo -u "${SERVICE_USER}" test -r "${INSTALL_PREFIX}/config/options.json" 2>/
 else
   yellow "    WARNING: ${SERVICE_USER} cannot read config files."
   yellow "    Attempting fix..."
-  chown -R "${SERVICE_USER}:${SERVICE_USER}" "${INSTALL_PREFIX}/config"
+  chown -R "${REAL_USER}:${REAL_GROUP}" "${INSTALL_PREFIX}/config"
   chmod -R 644 "${INSTALL_PREFIX}/config"/*.json 2>/dev/null || true
 fi
 
