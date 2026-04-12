@@ -59,7 +59,9 @@ async def detect_cameras() -> list[dict[str, Any]]:
             log.exception("camera detection via %s failed", cmd)
             errors.append(f"{cmd}: {e}")
 
-    # Also try v4l2 as fallback for USB cameras.
+    # Also try v4l2 as fallback for USB cameras (ZWO, etc.).
+    # Filter out non-camera devices (codecs, ISPs, decoders).
+    _V4L2_IGNORE = {"bcm2835-codec", "bcm2835-isp", "rpi-hevc", "rpivid", "cedrus", "stateless"}
     if not cameras:
         try:
             proc = await asyncio.create_subprocess_exec(
@@ -71,14 +73,16 @@ async def detect_cameras() -> list[dict[str, Any]]:
             output = (stdout or b"").decode(errors="replace")
             if output.strip():
                 log.info("v4l2 devices: %s", output[:500])
-                # Parse basic v4l2 output for ZWO/USB cameras.
                 for line in output.splitlines():
                     line = line.strip()
                     if line and not line.startswith("/dev/"):
-                        # Device name line (e.g. "ZWO ASI462MC (usb-...):")
+                        name = line.rstrip(":").strip()
+                        # Skip hardware codecs/ISPs — they aren't cameras.
+                        if any(skip in name.lower() for skip in _V4L2_IGNORE):
+                            continue
                         cameras.append({
                             "index": len(cameras),
-                            "model": line.rstrip(":").strip(),
+                            "model": name,
                             "info": "USB camera (v4l2)",
                             "modes": [],
                             "raw": line,
