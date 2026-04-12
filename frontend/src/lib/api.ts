@@ -152,6 +152,14 @@ export const api = {
   startrails: () => request<{ items: Array<{ name: string; size_bytes: number; mtime: number }> }>(
     "/keograms/startrails",
   ),
+  videos: (params?: { date?: string; sort?: string; order?: string }) =>
+    request<{
+      items: Array<{ name: string; size_bytes: number; mtime: number; date: string | null }>;
+      dates: string[];
+      total: number;
+    }>(`/keograms/videos${params ? `?${new URLSearchParams(
+      Object.fromEntries(Object.entries(params).filter(([, v]) => v != null)) as Record<string, string>
+    )}` : ""}`),
 
   alerts: () => request<Array<{
     id: number; level: string; source: string; message: string;
@@ -226,4 +234,5 @@ export const fileUrl = {
   startrail: (name: string) => `${base}/keograms/startrails/${encodeURIComponent(name)}`,
   liveLatest: () => `${base}/live/latest.jpg`,
   mask: (name: string) => `${base}/masks/${encodeURIComponent(name)}`,
+  video: (name: string) => `${base}/keograms/videos/${encodeURIComponent(name)}`,
 };

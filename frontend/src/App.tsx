@@ -5,6 +5,7 @@ import Gallery from "./routes/Gallery";
 import Settings from "./routes/Settings";
 import MaskEditor from "./routes/MaskEditor";
 import Keograms from "./routes/Keograms";
+import Videos from "./routes/Videos";
 import Alerts from "./routes/Alerts";
 import Notifications from "./routes/Notifications";
 import Setup from "./routes/Setup";
@@ -19,6 +20,7 @@ export default function App() {
         <Route path="settings" element={<Settings />} />
         <Route path="mask" element={<MaskEditor />} />
         <Route path="keograms" element={<Keograms />} />
+        <Route path="videos" element={<Videos />} />
         <Route path="alerts" element={<Alerts />} />
         <Route path="notifications" element={<Notifications />} />
         <Route path="setup" element={<Setup />} />
