@@ -1,12 +1,12 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=45"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "allsky-web"
 version = "0.1.0"
 description = "Modern FastAPI/React web interface for the Allsky sky camera project"
-requires-python = ">=3.11"
+requires-python = ">=3.9"
 dependencies = [
     "fastapi>=0.115",
     "uvicorn[standard]>=0.30",
