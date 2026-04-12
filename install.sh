@@ -323,13 +323,14 @@ RestartSec=3
 WantedBy=multi-user.target
 SVCEOF
 
-# Sudoers — allow web UI to control services, enable camera, and reboot.
+# Sudoers — allow web UI to control services, enable camera, reboot, and shutdown.
 cat >/etc/sudoers.d/allsky-web <<SUDOEOF
 ${SERVICE_USER} ALL=(root) NOPASSWD: /usr/bin/systemctl start allsky.service
 ${SERVICE_USER} ALL=(root) NOPASSWD: /usr/bin/systemctl stop allsky.service
 ${SERVICE_USER} ALL=(root) NOPASSWD: /usr/bin/systemctl restart allsky.service
 ${SERVICE_USER} ALL=(root) NOPASSWD: /usr/bin/raspi-config nonint *
 ${SERVICE_USER} ALL=(root) NOPASSWD: /usr/sbin/reboot
+${SERVICE_USER} ALL=(root) NOPASSWD: /usr/sbin/shutdown -h now
 SUDOEOF
 chmod 0440 /etc/sudoers.d/allsky-web
 visudo -cf /etc/sudoers.d/allsky-web >/dev/null 2>&1 || true

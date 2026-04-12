@@ -1,17 +1,34 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { api } from "../lib/api";
+import {
+  Cpu, Thermometer, HardDrive, MemoryStick, Wifi, Power, RefreshCw,
+  Activity, Server, Clock, AlertTriangle, Zap, Camera, FolderOpen,
+  PowerOff, RotateCcw, ChevronDown, ChevronUp,
+} from "lucide-react";
+import { api, AllskyDiskUsage } from "../lib/api";
 import { Tile } from "../components/Tile";
 import { StatusPill } from "../components/StatusPill";
 
 export default function System() {
-  const { data: sys } = useQuery({
+  const { data: sys, refetch: refetchSys } = useQuery({
     queryKey: ["system"],
     queryFn: api.system,
     refetchInterval: 5_000,
   });
 
+  const { data: allskyDisk } = useQuery({
+    queryKey: ["allsky-disk"],
+    queryFn: api.allskyDisk,
+    staleTime: 30_000,
+  });
+
   const control = useMutation({ mutationFn: api.serviceControl });
+  const rebootMut = useMutation({ mutationFn: api.rebootPi });
+  const shutdownMut = useMutation({ mutationFn: api.shutdownPi });
+
+  const [confirmReboot, setConfirmReboot] = useState(false);
+  const [confirmShutdown, setConfirmShutdown] = useState(false);
+  const [showNetwork, setShowNetwork] = useState(false);
 
   const [logLines, setLogLines] = useState(200);
   const { data: logText, refetch: refetchLog, isFetching: logLoading } = useQuery({
@@ -20,93 +37,279 @@ export default function System() {
     enabled: false,
   });
 
+  const h = sys?.host;
+  const a = sys?.allsky;
+
   return (
     <div className="flex flex-col gap-4">
-      {/* Status overview */}
-      {sys && (
-        <div className="card flex items-center gap-4 flex-wrap">
-          <StatusPill status={sys.allsky.status} />
-          <span className="text-sm text-ink-muted">
-            Allsky {sys.allsky.version}
-          </span>
-          <span className="text-sm text-ink-muted">
-            Camera: {sys.allsky.camera.active_model || sys.allsky.camera.active || "—"}
-          </span>
-        </div>
-      )}
-
-      {/* Service control */}
-      <div className="card flex flex-wrap gap-2 items-center">
-        <h2 className="text-lg font-semibold mr-auto">Service control</h2>
-        {(["start", "stop", "restart", "status"] as const).map((v) => (
-          <button
-            key={v}
-            disabled={control.isPending}
-            onClick={() => control.mutate(v)}
-            className="px-3 py-1.5 rounded-lg border border-bg-raised text-sm hover:bg-bg-raised disabled:opacity-50"
-          >
-            {v}
-          </button>
-        ))}
+      {/* Header */}
+      <div className="flex items-center gap-3 flex-wrap">
+        <Server size={22} className="text-accent" />
+        <h1 className="text-xl font-semibold">System</h1>
+        <button
+          onClick={() => refetchSys()}
+          className="ml-auto p-2 rounded-lg hover:bg-bg-raised text-ink-muted"
+          title="Refresh"
+        >
+          <RefreshCw size={16} />
+        </button>
       </div>
 
-      {control.data && (
-        <div className={`card text-sm ${control.data.exit_code === 0 ? "text-ok" : "text-warn"}`}>
-          {control.data.exit_code === 0
-            ? `${control.data.verb} completed successfully.`
-            : `${control.data.verb} returned code ${control.data.exit_code}.`}
-          {control.data.stdout && (
-            <pre className="text-xs font-mono text-ink-muted mt-2 whitespace-pre-wrap overflow-auto max-h-40">
-              {control.data.stdout.trim()}
-            </pre>
+      {/* Pi info + Allsky status */}
+      {sys && (
+        <div className="card flex flex-wrap gap-x-6 gap-y-2 items-center">
+          {h?.pi_model && (
+            <span className="text-sm font-medium">{h.pi_model}</span>
           )}
+          <span className="text-sm text-ink-muted">{h?.hostname}</span>
+          <span className="text-sm text-ink-muted">{h?.os}</span>
+          <StatusPill status={a?.status ?? "Unknown"} />
+          <span className="text-sm text-ink-muted">
+            Allsky {a?.version}
+          </span>
+          <span className="text-sm text-ink-muted">
+            <Camera size={14} className="inline mr-1" />
+            {a?.camera.active_model || a?.camera.active || "No camera"}
+          </span>
         </div>
       )}
 
-      {/* System tiles */}
-      {sys && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <Tile
-            label="CPU temp"
-            value={sys.host.cpu_temp_c?.toFixed(1) ?? "—"}
-            hint="°C"
-            status={
-              sys.host.cpu_temp_c == null
-                ? undefined
-                : sys.host.cpu_temp_c < 65
-                ? "ok"
-                : sys.host.cpu_temp_c < 80
-                ? "warn"
-                : "err"
-            }
-          />
-          <Tile label="CPU usage" value={`${sys.host.cpu_percent.toFixed(0)} %`} />
-          <Tile
-            label="Memory"
-            value={`${sys.host.memory.percent.toFixed(0)} %`}
-            hint={fmtBytes(sys.host.memory.available) + " free"}
-            status={sys.host.memory.percent < 85 ? "ok" : sys.host.memory.percent < 95 ? "warn" : "err"}
-          />
-          <Tile
-            label="Disk"
-            value={`${sys.host.disk.percent.toFixed(0)} %`}
-            hint={fmtBytes(sys.host.disk.free) + " free"}
-            status={sys.host.disk.percent < 80 ? "ok" : sys.host.disk.percent < 92 ? "warn" : "err"}
-          />
-          <Tile label="Load 1m" value={sys.host.load_avg["1m"].toFixed(2)} />
-          <Tile label="Load 5m" value={sys.host.load_avg["5m"].toFixed(2)} />
-          <Tile label="Load 15m" value={sys.host.load_avg["15m"].toFixed(2)} />
-          <Tile
-            label="Uptime"
-            value={fmtUptime(sys.host.uptime_seconds)}
-          />
+      {/* Allsky service control */}
+      <div className="card">
+        <div className="flex flex-wrap gap-2 items-center">
+          <h2 className="text-lg font-semibold mr-auto">Allsky Service</h2>
+          {(["start", "stop", "restart", "status"] as const).map((v) => (
+            <button
+              key={v}
+              disabled={control.isPending}
+              onClick={() => control.mutate(v)}
+              className="px-3 py-1.5 rounded-lg border border-bg-raised text-sm hover:bg-bg-raised disabled:opacity-50 capitalize"
+            >
+              {v}
+            </button>
+          ))}
         </div>
+        {control.data && (
+          <div className={`mt-3 text-sm ${control.data.exit_code === 0 ? "text-ok" : "text-warn"}`}>
+            {control.data.exit_code === 0
+              ? `${control.data.verb} completed successfully.`
+              : `${control.data.verb} returned code ${control.data.exit_code}.`}
+            {control.data.stdout && (
+              <pre className="text-xs font-mono text-ink-muted mt-2 whitespace-pre-wrap overflow-auto max-h-40">
+                {control.data.stdout.trim()}
+              </pre>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* CPU & Temperature */}
+      {h && (
+        <>
+          <h2 className="text-lg font-semibold flex items-center gap-2">
+            <Cpu size={18} /> CPU & Temperature
+          </h2>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <Tile
+              label="CPU Temperature"
+              value={h.cpu_temp_c?.toFixed(1) ?? "—"}
+              hint="°C"
+              status={
+                h.cpu_temp_c == null ? undefined
+                  : h.cpu_temp_c < 65 ? "ok"
+                  : h.cpu_temp_c < 80 ? "warn" : "err"
+              }
+            />
+            <Tile label="CPU Usage" value={`${h.cpu_percent.toFixed(0)}%`} />
+            <Tile
+              label="CPU Cores"
+              value={`${h.cpu_info.cores_logical ?? "?"}`}
+              hint={h.cpu_info.architecture}
+            />
+            <Tile label="Load 1m" value={h.load_avg["1m"].toFixed(2)} />
+            <Tile label="Load 5m" value={h.load_avg["5m"].toFixed(2)} />
+            <Tile label="Load 15m" value={h.load_avg["15m"].toFixed(2)} />
+            <Tile
+              label="Uptime"
+              value={fmtUptime(h.uptime_seconds)}
+              hint={`Boot: ${new Date(h.boot_time * 1000).toLocaleString()}`}
+            />
+          </div>
+
+          {/* Throttle warnings */}
+          {h.throttle && (
+            <ThrottleWarnings throttle={h.throttle} />
+          )}
+        </>
       )}
+
+      {/* Memory */}
+      {h && (
+        <>
+          <h2 className="text-lg font-semibold flex items-center gap-2">
+            <MemoryStick size={18} /> Memory
+          </h2>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <Tile
+              label="RAM Usage"
+              value={`${h.memory.percent.toFixed(0)}%`}
+              hint={`${fmtBytes(h.memory.used)} / ${fmtBytes(h.memory.total)}`}
+              status={h.memory.percent < 85 ? "ok" : h.memory.percent < 95 ? "warn" : "err"}
+            />
+            <Tile
+              label="RAM Available"
+              value={fmtBytes(h.memory.available)}
+              hint={`of ${fmtBytes(h.memory.total)}`}
+            />
+            <Tile
+              label="Swap Usage"
+              value={h.swap.total > 0 ? `${h.swap.percent.toFixed(0)}%` : "None"}
+              hint={h.swap.total > 0 ? `${fmtBytes(h.swap.used)} / ${fmtBytes(h.swap.total)}` : "No swap configured"}
+            />
+          </div>
+        </>
+      )}
+
+      {/* Disk */}
+      {h && (
+        <>
+          <h2 className="text-lg font-semibold flex items-center gap-2">
+            <HardDrive size={18} /> Disk
+          </h2>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <Tile
+              label="Root (/)"
+              value={`${h.disk_root.percent.toFixed(0)}%`}
+              hint={`${fmtBytes(h.disk_root.free)} free of ${fmtBytes(h.disk_root.total)}`}
+              status={h.disk_root.percent < 80 ? "ok" : h.disk_root.percent < 92 ? "warn" : "err"}
+            />
+            {h.disk.path !== "/" && (
+              <Tile
+                label={`Data (${h.disk.path})`}
+                value={`${h.disk.percent.toFixed(0)}%`}
+                hint={`${fmtBytes(h.disk.free)} free of ${fmtBytes(h.disk.total)}`}
+                status={h.disk.percent < 80 ? "ok" : h.disk.percent < 92 ? "warn" : "err"}
+              />
+            )}
+          </div>
+
+          {/* Allsky storage breakdown */}
+          {allskyDisk && <AllskyStorageBreakdown usage={allskyDisk} />}
+        </>
+      )}
+
+      {/* Network */}
+      {h && h.network.length > 0 && (
+        <>
+          <button
+            className="text-lg font-semibold flex items-center gap-2 hover:text-accent transition-colors"
+            onClick={() => setShowNetwork(!showNetwork)}
+          >
+            <Wifi size={18} /> Network
+            {showNetwork ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+          </button>
+          {showNetwork && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {h.network.map((iface) => (
+                <div key={iface.name} className="card">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className={`w-2 h-2 rounded-full ${iface.is_up ? "bg-green-500" : "bg-red-500"}`} />
+                    <span className="font-mono font-medium">{iface.name}</span>
+                    {iface.speed_mbps ? (
+                      <span className="text-xs text-ink-dim">{iface.speed_mbps} Mbps</span>
+                    ) : null}
+                  </div>
+                  {iface.addresses.map((addr, i) => (
+                    <div key={i} className="text-sm font-mono text-ink-muted ml-4">
+                      {addr.address}
+                      {addr.netmask && <span className="text-ink-dim"> / {addr.netmask}</span>}
+                    </div>
+                  ))}
+                  {(iface.bytes_sent != null || iface.bytes_recv != null) && (
+                    <div className="text-xs text-ink-dim mt-1 ml-4">
+                      TX: {fmtBytes(iface.bytes_sent ?? 0)} &nbsp; RX: {fmtBytes(iface.bytes_recv ?? 0)}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+
+      {/* Power controls */}
+      <h2 className="text-lg font-semibold flex items-center gap-2">
+        <Power size={18} /> Power Management
+      </h2>
+      <div className="card flex flex-wrap gap-3">
+        {!confirmReboot ? (
+          <button
+            onClick={() => setConfirmReboot(true)}
+            className="px-4 py-2 rounded-lg bg-amber-600/20 border border-amber-600/40 text-amber-400 hover:bg-amber-600/30 flex items-center gap-2 text-sm font-medium"
+          >
+            <RotateCcw size={16} /> Reboot Pi
+          </button>
+        ) : (
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-warn">Are you sure?</span>
+            <button
+              onClick={() => { rebootMut.mutate(); setConfirmReboot(false); }}
+              disabled={rebootMut.isPending}
+              className="px-3 py-1.5 rounded-lg bg-amber-600 text-white text-sm font-medium hover:bg-amber-700 disabled:opacity-50"
+            >
+              Yes, reboot
+            </button>
+            <button
+              onClick={() => setConfirmReboot(false)}
+              className="px-3 py-1.5 rounded-lg border border-bg-raised text-sm"
+            >
+              Cancel
+            </button>
+          </div>
+        )}
+
+        {!confirmShutdown ? (
+          <button
+            onClick={() => setConfirmShutdown(true)}
+            className="px-4 py-2 rounded-lg bg-red-600/20 border border-red-600/40 text-red-400 hover:bg-red-600/30 flex items-center gap-2 text-sm font-medium"
+          >
+            <PowerOff size={16} /> Shutdown Pi
+          </button>
+        ) : (
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-red-400">Are you sure? You will need physical access to turn it back on.</span>
+            <button
+              onClick={() => { shutdownMut.mutate(); setConfirmShutdown(false); }}
+              disabled={shutdownMut.isPending}
+              className="px-3 py-1.5 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 disabled:opacity-50"
+            >
+              Yes, shutdown
+            </button>
+            <button
+              onClick={() => setConfirmShutdown(false)}
+              className="px-3 py-1.5 rounded-lg border border-bg-raised text-sm"
+            >
+              Cancel
+            </button>
+          </div>
+        )}
+
+        {(rebootMut.data || shutdownMut.data) && (
+          <div className="w-full text-sm text-ok">
+            {rebootMut.data?.message || shutdownMut.data?.message}
+          </div>
+        )}
+        {(rebootMut.error || shutdownMut.error) && (
+          <div className="w-full text-sm text-red-400">
+            {String(rebootMut.error || shutdownMut.error)}
+          </div>
+        )}
+      </div>
 
       {/* Log viewer */}
       <div className="card">
         <div className="flex items-center gap-3 mb-2">
-          <h2 className="text-lg font-semibold">Allsky log</h2>
+          <h2 className="text-lg font-semibold">Allsky Log</h2>
           <select
             className="bg-bg-base border border-bg-raised rounded-lg px-2 py-1 text-sm"
             value={logLines}
@@ -122,7 +325,7 @@ export default function System() {
             disabled={logLoading}
             className="px-3 py-1.5 rounded-lg border border-bg-raised text-sm disabled:opacity-50"
           >
-            {logLoading ? "Loading…" : logText ? "Refresh" : "Load log"}
+            {logLoading ? "Loading\u2026" : logText ? "Refresh" : "Load log"}
           </button>
         </div>
         {logText && (
@@ -131,9 +334,110 @@ export default function System() {
           </pre>
         )}
       </div>
+
+      {/* System info footer */}
+      {h && (
+        <div className="text-xs text-ink-dim flex flex-wrap gap-4">
+          <span>Python {h.python_version}</span>
+          <span>Hostname: {h.hostname}</span>
+          <span>OS: {h.os}</span>
+        </div>
+      )}
     </div>
   );
 }
+
+/* ── Sub-components ────────────────────────────────────────────── */
+
+function ThrottleWarnings({ throttle }: { throttle: NonNullable<import("../lib/api").SystemSnapshot["host"]["throttle"]> }) {
+  const warnings: Array<{ label: string; active: boolean; occurred: boolean }> = [
+    { label: "Under-voltage", active: throttle.under_voltage_now, occurred: throttle.under_voltage_occurred },
+    { label: "Frequency capped", active: throttle.freq_capped_now, occurred: throttle.freq_capped_occurred },
+    { label: "Throttled", active: throttle.throttled_now, occurred: throttle.throttled_occurred },
+    { label: "Soft temp limit", active: throttle.soft_temp_limit_now, occurred: throttle.soft_temp_limit_occurred },
+  ];
+
+  const anyActive = warnings.some((w) => w.active);
+  const anyOccurred = warnings.some((w) => w.occurred);
+
+  if (!anyActive && !anyOccurred) return null;
+
+  return (
+    <div className={`card border ${anyActive ? "border-red-500/50 bg-red-500/5" : "border-amber-500/30 bg-amber-500/5"}`}>
+      <div className="flex items-center gap-2 mb-2">
+        {anyActive ? <Zap size={16} className="text-red-400" /> : <AlertTriangle size={16} className="text-amber-400" />}
+        <span className="font-medium text-sm">
+          {anyActive ? "Active throttling detected" : "Throttling occurred since boot"}
+        </span>
+      </div>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+        {warnings.map((w) => (
+          <div key={w.label} className="text-xs">
+            <span className={w.active ? "text-red-400 font-medium" : w.occurred ? "text-amber-400" : "text-ink-dim"}>
+              {w.active ? "\u26a0 " : w.occurred ? "\u25cb " : "\u2713 "}
+              {w.label}
+            </span>
+            {w.active && <span className="text-red-400 text-[10px] ml-1">(NOW)</span>}
+            {!w.active && w.occurred && <span className="text-amber-400 text-[10px] ml-1">(past)</span>}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function AllskyStorageBreakdown({ usage }: { usage: AllskyDiskUsage }) {
+  const items = [
+    { label: "Images", value: usage.images, icon: Camera },
+    { label: "Darks", value: usage.darks, icon: FolderOpen },
+    { label: "Keograms", value: usage.keograms, icon: Activity },
+    { label: "Startrails", value: usage.startrails, icon: Activity },
+    { label: "Videos", value: usage.videos, icon: FolderOpen },
+    { label: "Config", value: usage.config, icon: FolderOpen },
+    { label: "Temp", value: usage.tmp, icon: FolderOpen },
+  ];
+
+  const total = items.reduce((s, i) => s + i.value, 0);
+
+  return (
+    <div className="card">
+      <div className="flex items-center gap-2 mb-3">
+        <FolderOpen size={16} className="text-accent" />
+        <span className="font-medium text-sm">Allsky Storage Breakdown</span>
+        <span className="text-xs text-ink-dim ml-auto">Total: {fmtBytes(total)}</span>
+      </div>
+      {/* Bar visualization */}
+      {total > 0 && (
+        <div className="h-4 rounded-full overflow-hidden flex mb-3 bg-bg-base border border-bg-raised">
+          {items.filter((i) => i.value > 0).map((item, idx) => (
+            <div
+              key={item.label}
+              className={`h-full ${STORAGE_COLORS[idx % STORAGE_COLORS.length]}`}
+              style={{ width: `${(item.value / total) * 100}%` }}
+              title={`${item.label}: ${fmtBytes(item.value)}`}
+            />
+          ))}
+        </div>
+      )}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+        {items.map((item, idx) => (
+          <div key={item.label} className="flex items-center gap-2 text-sm">
+            <div className={`w-3 h-3 rounded-sm ${STORAGE_COLORS[idx % STORAGE_COLORS.length]}`} />
+            <span className="text-ink-muted">{item.label}</span>
+            <span className="ml-auto font-mono text-xs">{fmtBytes(item.value)}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+const STORAGE_COLORS = [
+  "bg-blue-500", "bg-purple-500", "bg-emerald-500", "bg-amber-500",
+  "bg-rose-500", "bg-cyan-500", "bg-orange-500",
+];
+
+/* ── Helpers ────────────────────────────────────────────────────── */
 
 function fmtBytes(n: number): string {
   const units = ["B", "KB", "MB", "GB", "TB"];
