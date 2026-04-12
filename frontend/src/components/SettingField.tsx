@@ -2,6 +2,24 @@ import { useId } from "react";
 import type { SettingDef } from "../lib/api";
 import { fieldErrors } from "../lib/validate";
 
+/** Upstream docs base — rewrites relative /documentation/ links to the
+ *  original Allsky GitHub repository wiki/documentation. */
+const DOCS_BASE = "https://htmlpreview.github.io/?https://github.com/thomasjacquin/allsky/blob/master";
+
+/** Rewrite doc links in description HTML so they point to the upstream docs. */
+function fixDocLinks(html: string): string {
+  return html.replace(
+    /href=["']\/documentation\//g,
+    `href="${DOCS_BASE}/documentation/`,
+  ).replace(
+    /href=["']\/execute\.php[^"']*/g,
+    'href="#',  // disable PHP execute links — not applicable
+  ).replace(
+    /<a\s+(?=[^>]*allsky=['"]true['"])/g,
+    '<a target="_blank" rel="noopener noreferrer" ',
+  );
+}
+
 interface Props {
   def: SettingDef;
   value: unknown;
@@ -23,6 +41,9 @@ export function SettingField({ def, value, onChange, disabled, dirty }: Props) {
   const borderClass =
     errors.length > 0 ? "border-err" : dirty ? "border-accent" : "border-bg-raised";
 
+  const hasDefault = def.default !== null && def.default !== undefined && def.default !== "";
+  const isAtDefault = hasDefault && String(value) === String(def.default);
+
   return (
     <div className="flex flex-col gap-1">
       <label htmlFor={id} className="flex items-center justify-between gap-3">
@@ -36,16 +57,37 @@ export function SettingField({ def, value, onChange, disabled, dirty }: Props) {
               restart
             </span>
           )}
-          {dirty && <span className="ml-2 text-[10px] text-accent">●</span>}
+          {dirty && <span className="ml-2 text-[10px] text-accent">&#9679;</span>}
         </span>
       </label>
 
       {renderWidget(def, value, onChange, disabled, id, `${baseInput} ${borderClass}`)}
 
+      {/* Default / recommended value */}
+      {hasDefault && def.type !== "boolean" && (
+        <div className="text-[11px] text-ink-dim flex items-center gap-1">
+          <span>Default:</span>
+          <button
+            type="button"
+            className={`font-mono px-1 rounded ${
+              isAtDefault
+                ? "text-emerald-400"
+                : "text-accent hover:underline cursor-pointer"
+            }`}
+            title={isAtDefault ? "Currently at default" : "Click to reset to default"}
+            onClick={() => { if (!isAtDefault && !disabled) onChange(def.default); }}
+            disabled={disabled || isAtDefault}
+          >
+            {String(def.default)}
+          </button>
+          {isAtDefault && <span className="text-emerald-400 text-[10px]">&#10003;</span>}
+        </div>
+      )}
+
       {def.description && (
         <div
-          className="text-xs text-ink-dim"
-          dangerouslySetInnerHTML={{ __html: def.description }}
+          className="text-xs text-ink-dim [&_a]:text-accent [&_a]:underline"
+          dangerouslySetInnerHTML={{ __html: fixDocLinks(def.description) }}
         />
       )}
       {errors.length > 0 && (

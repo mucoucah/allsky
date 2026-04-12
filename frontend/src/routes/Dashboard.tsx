@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import { Wrench, Play, Square } from "lucide-react";
+import { Wrench, Play, Square, Zap, AlertTriangle } from "lucide-react";
 import { api, fileUrl } from "../lib/api";
 import { useLiveSocket } from "../hooks/useLiveSocket";
 import { Tile } from "../components/Tile";
@@ -165,6 +165,52 @@ export default function Dashboard() {
           <div className="text-ink-dim text-sm">loading…</div>
         )}
       </section>
+
+      {/* Throttle alert banner */}
+      {sys?.host.throttle && (
+        sys.host.throttle.under_voltage_now || sys.host.throttle.throttled_now ||
+        sys.host.throttle.freq_capped_now || sys.host.throttle.soft_temp_limit_now
+      ) && (
+        <Link
+          to="/system"
+          className="lg:col-span-3 card border-red-500/50 bg-red-500/10 flex items-center gap-3 hover:bg-red-500/15 transition-colors animate-pulse"
+        >
+          <Zap size={24} className="text-red-400 shrink-0" />
+          <div>
+            <div className="font-semibold text-red-400">Throttling Active</div>
+            <div className="text-sm text-ink-muted flex flex-wrap gap-3">
+              {sys.host.throttle.under_voltage_now && <span>Under-voltage detected — check power supply</span>}
+              {sys.host.throttle.throttled_now && <span>CPU throttled</span>}
+              {sys.host.throttle.freq_capped_now && <span>Frequency capped</span>}
+              {sys.host.throttle.soft_temp_limit_now && <span>Temperature limit ({sys.host.cpu_temp_c?.toFixed(0)}°C)</span>}
+            </div>
+          </div>
+        </Link>
+      )}
+
+      {/* Past throttle warning (not active now but occurred since boot) */}
+      {sys?.host.throttle && !(
+        sys.host.throttle.under_voltage_now || sys.host.throttle.throttled_now ||
+        sys.host.throttle.freq_capped_now || sys.host.throttle.soft_temp_limit_now
+      ) && (
+        sys.host.throttle.under_voltage_occurred || sys.host.throttle.throttled_occurred ||
+        sys.host.throttle.freq_capped_occurred || sys.host.throttle.soft_temp_limit_occurred
+      ) && (
+        <Link
+          to="/system"
+          className="lg:col-span-3 card border-amber-500/30 bg-amber-500/5 flex items-center gap-3 hover:bg-amber-500/10 transition-colors"
+        >
+          <AlertTriangle size={20} className="text-amber-400 shrink-0" />
+          <div className="text-sm text-amber-400">
+            Throttling occurred since last boot —
+            {sys.host.throttle.under_voltage_occurred && " under-voltage"}
+            {sys.host.throttle.throttled_occurred && " throttled"}
+            {sys.host.throttle.freq_capped_occurred && " freq-capped"}
+            {sys.host.throttle.soft_temp_limit_occurred && " temp-limit"}
+            . Click for details.
+          </div>
+        </Link>
+      )}
 
       {/* System tiles */}
       {sys && (
