@@ -99,7 +99,11 @@ def create_app() -> FastAPI:
 
 
 def _mount_frontend(app: FastAPI) -> None:
-    """Mount the React SPA if the dist directory exists."""
+    """Mount the React SPA if the dist directory exists.
+
+    This makes lighttpd optional — FastAPI serves the built frontend directly.
+    Must be called AFTER all /api/* routes so they take priority.
+    """
     from pathlib import Path
     from fastapi.staticfiles import StaticFiles
     from starlette.responses import FileResponse
@@ -111,31 +115,26 @@ def _mount_frontend(app: FastAPI) -> None:
     ]
     dist = next((c for c in candidates if c.is_dir()), None)
     if not dist:
+        log.info("frontend dist not found — API-only mode")
         return
 
     index_html = dist / "index.html"
+    if not index_html.exists():
+        log.warning("frontend dist exists but no index.html — skipping SPA mount")
+        return
 
-    # Static assets (JS, CSS, images).
-    assets = dist / "assets"
-    if assets.is_dir():
-        app.mount("/assets", StaticFiles(directory=str(assets)), name="assets")
+    log.info("serving frontend from %s", dist)
 
-    # Serve favicon and other root files.
-    for f in dist.iterdir():
-        if f.is_file() and f.name != "index.html":
-            name = f.name
-            # Closure capture needs explicit binding.
-            def _make_route(filepath: Path):
-                @app.get(f"/{filepath.name}", include_in_schema=False)
-                async def _serve():
-                    return FileResponse(str(filepath))
-            _make_route(f)
-
-    # SPA fallback: everything else → index.html.
-    if index_html.exists():
-        @app.get("/{path:path}", include_in_schema=False)
-        async def spa_fallback(path: str):
-            return FileResponse(str(index_html))
+    # Serve the entire dist tree as static files, with SPA fallback.
+    # The catch-all must come last so /api/* routes win.
+    @app.get("/{path:path}", include_in_schema=False)
+    async def spa_or_static(path: str):
+        # Try to serve a real file first.
+        candidate = dist / path
+        if candidate.is_file() and ".." not in path:
+            return FileResponse(str(candidate))
+        # Everything else → index.html (SPA client-side routing).
+        return FileResponse(str(index_html))
 
 
 app = create_app()
