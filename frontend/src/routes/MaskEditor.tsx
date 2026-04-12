@@ -117,24 +117,49 @@ export default function MaskEditor() {
   }
 
   async function save() {
-    if (!maskLayerRef.current || !nativeW || !nativeH) return;
+    if (!nativeW || !nativeH) return;
     setBusy(true);
     setMsg(null);
     try {
-      // Render only the mask layer at native resolution. We pass `pixelRatio`
-      // to undo the stage's display scale: layerCanvas size becomes
-      // (stageW * (1/scale)) × (stageH * (1/scale)) = nativeW × nativeH.
-      const layerCanvas = maskLayerRef.current.toCanvas({ pixelRatio: 1 / scale });
-
-      // Composite the (transparent) mask layer onto a black background so we
-      // get a binary white-on-black mask, then encode as PNG.
+      // Render the mask at native resolution by drawing strokes onto an
+      // offscreen canvas (bypassing Konva's display scaling entirely).
       const out = document.createElement("canvas");
       out.width = nativeW;
       out.height = nativeH;
-      const octx = out.getContext("2d")!;
-      octx.fillStyle = "black";
-      octx.fillRect(0, 0, nativeW, nativeH);
-      octx.drawImage(layerCanvas, 0, 0, nativeW, nativeH);
+      const ctx = out.getContext("2d")!;
+
+      // Start with black background (unmasked = black).
+      ctx.fillStyle = "black";
+      ctx.fillRect(0, 0, nativeW, nativeH);
+
+      // Draw loaded existing mask first if present.
+      if (loadedMaskImage) {
+        ctx.drawImage(loadedMaskImage, 0, 0, nativeW, nativeH);
+      }
+
+      // Replay all visible strokes at native coordinates.
+      for (const stroke of visible) {
+        ctx.lineJoin = "round";
+        ctx.lineCap = "round";
+        ctx.lineWidth = stroke.size;
+
+        if (stroke.tool === "erase") {
+          ctx.globalCompositeOperation = "destination-out";
+          ctx.strokeStyle = "white";
+        } else {
+          ctx.globalCompositeOperation = "source-over";
+          ctx.strokeStyle = "white";
+        }
+
+        ctx.beginPath();
+        for (let i = 0; i < stroke.points.length; i += 2) {
+          const x = stroke.points[i];
+          const y = stroke.points[i + 1];
+          if (i === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+      }
 
       const blob: Blob | null = await new Promise((resolve) =>
         out.toBlob((b) => resolve(b), "image/png"),
@@ -142,7 +167,7 @@ export default function MaskEditor() {
       if (!blob) throw new Error("canvas encode failed");
 
       await api.uploadMask(name, blob);
-      setMsg(`Saved ${name} (${nativeW}×${nativeH})`);
+      setMsg(`Saved ${name} (${nativeW}\u00d7${nativeH})`);
       qc.invalidateQueries({ queryKey: ["masks"] });
     } catch (e) {
       setMsg(`Failed: ${(e as Error).message}`);
