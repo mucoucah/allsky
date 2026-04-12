@@ -262,6 +262,18 @@ cyan "    Installing Python packages (first run: 5-15 min on Pi 3B)..."
 }
 green "    Python backend installed."
 
+# Copy config files to install prefix where the web service user can read them.
+# This solves the persistent "Permission denied" on home dirs (Bookworm 700).
+WEB_CONFIG="${INSTALL_PREFIX}/config"
+mkdir -p "${WEB_CONFIG}"
+for cfg in options.json settings.json status.json; do
+  if [[ -f "${ALLSKY_HOME}/config/${cfg}" ]]; then
+    cp "${ALLSKY_HOME}/config/${cfg}" "${WEB_CONFIG}/${cfg}"
+  fi
+done
+chown -R "${SERVICE_USER}:${SERVICE_USER}" "${WEB_CONFIG}"
+green "    Config files synced to ${WEB_CONFIG}."
+
 # ── Step 5: React frontend ──────────────────────────────────────
 
 cyan "==> [5/6] Building React frontend"
@@ -300,6 +312,7 @@ if [[ ! -f "${ENV_FILE}" ]]; then
   SECRET="$(head -c 32 /dev/urandom | base64 | tr -d '=+/' | head -c 44)"
   cat >"${ENV_FILE}" <<ENVEOF
 ALLSKY_HOME=${ALLSKY_HOME}
+ALLSKY_WEB_CONFIG=${INSTALL_PREFIX}/config
 ALLSKY_WEB_DATA=${DATA_DIR}
 ALLSKY_WEB_SECRET=${SECRET}
 ALLSKY_WEB_HOST=0.0.0.0
@@ -311,6 +324,12 @@ ENVEOF
   chown root:"${SERVICE_USER}" "${ENV_FILE}"
 else
   sed -i "s|^ALLSKY_HOME=.*|ALLSKY_HOME=${ALLSKY_HOME}|" "${ENV_FILE}"
+  # Ensure ALLSKY_WEB_CONFIG is present (may be missing from older installs).
+  if ! grep -q '^ALLSKY_WEB_CONFIG=' "${ENV_FILE}"; then
+    sed -i "/^ALLSKY_HOME=/a ALLSKY_WEB_CONFIG=${INSTALL_PREFIX}/config" "${ENV_FILE}"
+  else
+    sed -i "s|^ALLSKY_WEB_CONFIG=.*|ALLSKY_WEB_CONFIG=${INSTALL_PREFIX}/config|" "${ENV_FILE}"
+  fi
 fi
 
 # Web UI systemd service.
@@ -355,6 +374,17 @@ systemctl enable allsky-web.service
 systemctl restart allsky-web.service 2>/dev/null || systemctl start allsky-web.service || true
 
 green "    Services configured."
+
+# Verify the web service can read config files.
+cyan "    Verifying config access..."
+if sudo -u "${SERVICE_USER}" test -r "${INSTALL_PREFIX}/config/options.json" 2>/dev/null; then
+  green "    Config files readable by ${SERVICE_USER}."
+else
+  yellow "    WARNING: ${SERVICE_USER} cannot read config files."
+  yellow "    Attempting fix..."
+  chown -R "${SERVICE_USER}:${SERVICE_USER}" "${INSTALL_PREFIX}/config"
+  chmod -R 644 "${INSTALL_PREFIX}/config"/*.json 2>/dev/null || true
+fi
 
 # ── Done ─────────────────────────────────────────────────────────
 

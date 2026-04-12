@@ -31,10 +31,10 @@ export default function System() {
   const [showNetwork, setShowNetwork] = useState(false);
 
   const [logLines, setLogLines] = useState(200);
+  const [logTab, setLogTab] = useState<"allsky" | "webui">("webui");
   const { data: logText, refetch: refetchLog, isFetching: logLoading } = useQuery({
-    queryKey: ["log", logLines],
-    queryFn: () => api.logTail(logLines),
-    enabled: false,
+    queryKey: ["log", logTab, logLines],
+    queryFn: () => (logTab === "allsky" ? api.logTail(logLines) : api.logTailWebui(logLines)),
   });
 
   const h = sys?.host;
@@ -308,8 +308,24 @@ export default function System() {
 
       {/* Log viewer */}
       <div className="card">
-        <div className="flex items-center gap-3 mb-2">
-          <h2 className="text-lg font-semibold">Allsky Log</h2>
+        <div className="flex items-center gap-3 mb-3 flex-wrap">
+          <h2 className="text-lg font-semibold">Logs</h2>
+          {/* Tab buttons */}
+          <div className="flex gap-1">
+            {(["webui", "allsky"] as const).map((tab) => (
+              <button
+                key={tab}
+                onClick={() => setLogTab(tab)}
+                className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors ${
+                  logTab === tab
+                    ? "bg-accent/20 text-accent border border-accent/40"
+                    : "bg-bg-raised text-ink-muted hover:text-ink"
+                }`}
+              >
+                {tab === "webui" ? "Web UI" : "Allsky Camera"}
+              </button>
+            ))}
+          </div>
           <select
             className="bg-bg-base border border-bg-raised rounded-lg px-2 py-1 text-sm"
             value={logLines}
@@ -325,14 +341,12 @@ export default function System() {
             disabled={logLoading}
             className="px-3 py-1.5 rounded-lg border border-bg-raised text-sm disabled:opacity-50"
           >
-            {logLoading ? "Loading\u2026" : logText ? "Refresh" : "Load log"}
+            {logLoading ? "Refreshing\u2026" : "Refresh"}
           </button>
         </div>
-        {logText && (
-          <pre className="text-xs font-mono whitespace-pre-wrap text-ink-muted overflow-auto max-h-96 bg-bg-base rounded-xl p-3 border border-bg-raised">
-            {logText}
-          </pre>
-        )}
+        <pre className="text-xs font-mono whitespace-pre-wrap text-ink-muted overflow-auto max-h-96 bg-bg-base rounded-xl p-3 border border-bg-raised">
+          {logLoading ? "Loading..." : logText || "(no log output)"}
+        </pre>
       </div>
 
       {/* System info footer */}

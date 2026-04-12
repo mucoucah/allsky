@@ -143,6 +143,10 @@ export const api = {
     const res = await fetch(`${base}/logs/allsky?lines=${lines}`);
     return res.text();
   },
+  logTailWebui: async (lines: number = 200): Promise<string> => {
+    const res = await fetch(`${base}/logs/webui?lines=${lines}`);
+    return res.text();
+  },
 
   settingsSchema: () => request<SettingsSchema>("/settings/schema"),
   settingsAudit: () => request<Array<{
