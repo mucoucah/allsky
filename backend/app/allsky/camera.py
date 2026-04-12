@@ -9,11 +9,49 @@ import asyncio
 import json
 import logging
 import re
+from pathlib import Path
 from typing import Any
 
 from .paths import paths
 
 log = logging.getLogger(__name__)
+
+# Known camera overlays for /boot/firmware/config.txt (or /boot/config.txt).
+# These sensors need a dtoverlay entry to be detected by libcamera.
+CAMERA_OVERLAYS: dict[str, dict[str, Any]] = {
+    "imx290": {
+        "overlay": "dtoverlay=imx290,clock-frequency=74250000",
+        "label": "Sony IMX290 (common in allsky cameras)",
+    },
+    "imx462": {
+        "overlay": "dtoverlay=imx290,clock-frequency=74250000",
+        "label": "Sony IMX462 (uses imx290 driver)",
+    },
+    "imx477": {
+        "overlay": "dtoverlay=imx477",
+        "label": "Sony IMX477 (HQ Camera)",
+    },
+    "imx708": {
+        "overlay": "dtoverlay=imx708",
+        "label": "Sony IMX708 (Camera Module 3)",
+    },
+    "imx219": {
+        "overlay": "dtoverlay=imx219",
+        "label": "Sony IMX219 (Camera Module 2)",
+    },
+    "ov5647": {
+        "overlay": "dtoverlay=ov5647",
+        "label": "OmniVision OV5647 (Camera Module 1)",
+    },
+    "imx519": {
+        "overlay": "dtoverlay=imx519",
+        "label": "Sony IMX519 (Arducam 16MP)",
+    },
+    "arducam_64mp": {
+        "overlay": "dtoverlay=arducam-64mp",
+        "label": "Arducam 64MP Hawkeye",
+    },
+}
 
 
 async def detect_cameras() -> list[dict[str, Any]]:
@@ -178,3 +216,77 @@ async def setup_initial_config(
 
     log.info("setup_initial_config: camera_type=%s model=%s", camera_type, camera_model)
     return {"ok": True}
+
+
+def _boot_config_path() -> Path | None:
+    """Find the boot config.txt path."""
+    for p in [Path("/boot/firmware/config.txt"), Path("/boot/config.txt")]:
+        if p.exists():
+            return p
+    return None
+
+
+def get_camera_overlay_status(sensor: str) -> dict[str, Any]:
+    """Check if a camera overlay is already in boot config."""
+    info = CAMERA_OVERLAYS.get(sensor.lower())
+    if not info:
+        return {"known": False, "sensor": sensor}
+
+    cfg = _boot_config_path()
+    if not cfg:
+        return {"known": True, "sensor": sensor, "overlay": info["overlay"],
+                "label": info["label"], "installed": False, "config_found": False}
+
+    try:
+        content = cfg.read_text()
+        # Check if the overlay line already exists (ignoring comments).
+        overlay_key = info["overlay"].split(",")[0]  # e.g. "dtoverlay=imx290"
+        installed = any(
+            overlay_key in line and not line.strip().startswith("#")
+            for line in content.splitlines()
+        )
+        return {"known": True, "sensor": sensor, "overlay": info["overlay"],
+                "label": info["label"], "installed": installed,
+                "config_path": str(cfg)}
+    except OSError:
+        return {"known": True, "sensor": sensor, "overlay": info["overlay"],
+                "label": info["label"], "installed": False, "error": "cannot read config"}
+
+
+async def install_camera_overlay(sensor: str) -> dict[str, Any]:
+    """Add the camera dtoverlay to boot config. Returns needs_reboot flag."""
+    info = CAMERA_OVERLAYS.get(sensor.lower())
+    if not info:
+        return {"ok": False, "error": f"Unknown sensor: {sensor}",
+                "known_sensors": list(CAMERA_OVERLAYS.keys())}
+
+    status = get_camera_overlay_status(sensor)
+    if status.get("installed"):
+        return {"ok": True, "already_installed": True, "needs_reboot": False,
+                "message": f"Overlay for {sensor} is already in boot config."}
+
+    cfg = _boot_config_path()
+    if not cfg:
+        return {"ok": False, "error": "Boot config.txt not found"}
+
+    # Write via sudo tee -a.
+    overlay_line = f"\n# Allsky camera ({info['label']})\n{info['overlay']}\n"
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "sudo", "-n", "tee", "-a", str(cfg),
+            stdin=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        _, stderr = await asyncio.wait_for(
+            proc.communicate(input=overlay_line.encode()),
+            timeout=10,
+        )
+        if proc.returncode != 0:
+            return {"ok": False, "error": f"sudo tee failed: {stderr.decode(errors='replace')}"}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+    log.info("installed camera overlay for %s in %s", sensor, cfg)
+    return {"ok": True, "needs_reboot": True, "overlay": info["overlay"],
+            "message": f"Added {info['overlay']} to {cfg}. Reboot required."}

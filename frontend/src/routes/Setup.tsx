@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
-import { Camera, MapPin, Check, RefreshCw, Play, Wifi } from "lucide-react";
+import { Camera, MapPin, Check, RefreshCw, Play, Wifi, Settings } from "lucide-react";
 import { api } from "../lib/api";
 
 /** Full setup wizard — user never needs a terminal after install.sh.
@@ -186,50 +186,10 @@ export default function Setup() {
             ))}
           </ul>
         ) : cameras ? (
-          <div className="rounded-xl bg-warn/10 border border-warn/30 p-4 flex flex-col gap-3">
-            <div className="text-warn text-sm font-medium">
-              No cameras detected
-            </div>
-            <p className="text-xs text-ink-muted">
-              Make sure your camera ribbon cable is connected. If this is a fresh
-              Pi setup, the camera interface may need to be enabled.
-            </p>
-            <div className="flex flex-wrap gap-2">
-              <button
-                onClick={() => enableCamera.mutate()}
-                disabled={enableCamera.isPending}
-                className="px-3 py-1.5 rounded-lg bg-warn text-bg-base text-sm font-medium inline-flex items-center gap-1.5"
-              >
-                <Wifi size={14} />
-                {enableCamera.isPending ? "Enabling..." : "Enable camera interface"}
-              </button>
-              {enableCamera.isSuccess && enableCamera.data?.needs_reboot && (
-                <button
-                  onClick={() => reboot.mutate()}
-                  disabled={reboot.isPending}
-                  className="px-3 py-1.5 rounded-lg bg-err text-white text-sm font-medium"
-                >
-                  {reboot.isPending ? "Rebooting..." : "Reboot now"}
-                </button>
-              )}
-            </div>
-            {enableCamera.isSuccess && !enableCamera.data?.needs_reboot && (
-              <p className="text-xs text-ok">
-                Camera interface already enabled. Try scanning again.
-              </p>
-            )}
-            {enableCamera.isSuccess && enableCamera.data?.needs_reboot && (
-              <p className="text-xs text-warn">
-                Camera interface enabled. A reboot is required — click the button above,
-                then reload this page after about 60 seconds.
-              </p>
-            )}
-            {reboot.isSuccess && (
-              <p className="text-xs text-ink-muted">
-                Rebooting... this page will stop responding. Reload in about 60 seconds.
-              </p>
-            )}
-          </div>
+          <NoCamerasSection
+            enableCamera={enableCamera}
+            reboot={reboot}
+          />
         ) : null}
       </section>
 
@@ -279,6 +239,112 @@ export default function Setup() {
         <div className="text-err text-sm text-center">
           Failed: {(configure.error as Error).message}
         </div>
+      )}
+    </div>
+  );
+}
+
+/* ── No cameras section with overlay installer ──────────────── */
+
+function NoCamerasSection({
+  enableCamera,
+  reboot,
+}: {
+  enableCamera: ReturnType<typeof useMutation<any, any, void>>;
+  reboot: ReturnType<typeof useMutation<any, any, void>>;
+}) {
+  const [selectedSensor, setSelectedSensor] = useState("");
+  const installOverlay = useMutation({ mutationFn: (sensor: string) => api.installOverlay(sensor) });
+  const { data: overlays } = useQuery({
+    queryKey: ["camera-overlays"],
+    queryFn: api.cameraOverlays,
+  });
+
+  const overlayList = overlays ? Object.values(overlays.overlays) : [];
+  const needsReboot = enableCamera.data?.needs_reboot || installOverlay.data?.needs_reboot;
+
+  return (
+    <div className="rounded-xl bg-warn/10 border border-warn/30 p-4 flex flex-col gap-4">
+      <div className="text-warn text-sm font-medium">No cameras detected</div>
+      <p className="text-xs text-ink-muted">
+        Make sure your camera ribbon cable is connected. CSI cameras (like IMX290/IMX462)
+        need a device tree overlay in <code className="text-ink">/boot/config.txt</code> to be recognized.
+      </p>
+
+      {/* Camera overlay installer */}
+      <div className="border border-bg-raised rounded-lg p-3 bg-bg-panel/50">
+        <div className="flex items-center gap-2 mb-2">
+          <Settings size={14} className="text-accent" />
+          <span className="text-sm font-medium">Install camera overlay</span>
+        </div>
+        <p className="text-xs text-ink-dim mb-2">
+          Select your camera sensor to add the correct <code>dtoverlay</code> to boot config:
+        </p>
+        <div className="flex flex-wrap gap-2 items-center">
+          <select
+            value={selectedSensor}
+            onChange={(e) => setSelectedSensor(e.target.value)}
+            className="bg-bg-base border border-bg-raised rounded-lg px-2 py-1.5 text-sm flex-1 min-w-[200px]"
+          >
+            <option value="">Select your camera sensor...</option>
+            {overlayList.map((o) => (
+              <option key={o.sensor} value={o.sensor}>
+                {o.label} {o.installed ? "(already installed)" : ""}
+              </option>
+            ))}
+          </select>
+          <button
+            onClick={() => selectedSensor && installOverlay.mutate(selectedSensor)}
+            disabled={!selectedSensor || installOverlay.isPending}
+            className="px-3 py-1.5 rounded-lg bg-accent text-bg-base text-sm font-medium disabled:opacity-50"
+          >
+            {installOverlay.isPending ? "Installing..." : "Install overlay"}
+          </button>
+        </div>
+        {installOverlay.isSuccess && installOverlay.data?.already_installed && (
+          <p className="text-xs text-ok mt-2">Overlay already installed. Try scanning again.</p>
+        )}
+        {installOverlay.isSuccess && installOverlay.data?.needs_reboot && (
+          <p className="text-xs text-warn mt-2">
+            Overlay added. A reboot is required for the camera to be detected.
+          </p>
+        )}
+      </div>
+
+      {/* Enable camera interface */}
+      <div className="flex flex-wrap gap-2">
+        <button
+          onClick={() => enableCamera.mutate()}
+          disabled={enableCamera.isPending}
+          className="px-3 py-1.5 rounded-lg bg-warn text-bg-base text-sm font-medium inline-flex items-center gap-1.5"
+        >
+          <Wifi size={14} />
+          {enableCamera.isPending ? "Enabling..." : "Enable camera interface"}
+        </button>
+      </div>
+      {enableCamera.isSuccess && !enableCamera.data?.needs_reboot && (
+        <p className="text-xs text-ok">Camera interface already enabled.</p>
+      )}
+
+      {/* Reboot button — shown when any action requires reboot */}
+      {needsReboot && (
+        <div className="border-t border-bg-raised pt-3 flex flex-wrap items-center gap-3">
+          <button
+            onClick={() => reboot.mutate()}
+            disabled={reboot.isPending}
+            className="px-4 py-2 rounded-lg bg-err text-white text-sm font-medium"
+          >
+            {reboot.isPending ? "Rebooting..." : "Reboot now"}
+          </button>
+          <span className="text-xs text-warn">
+            Reboot required for changes to take effect. Reload page after ~60 seconds.
+          </span>
+        </div>
+      )}
+      {reboot.isSuccess && (
+        <p className="text-xs text-ink-muted">
+          Rebooting... this page will stop responding. Reload in about 60 seconds.
+        </p>
       )}
     </div>
   );
