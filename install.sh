@@ -92,7 +92,8 @@ cyan "==> [2/6] Setting up Allsky camera backend"
 # Compile the capture binary if not already built.
 if [[ ! -f "${ALLSKY_HOME}/bin/capture_RPi" && -f "${ALLSKY_HOME}/src/Makefile" ]]; then
   cyan "    Installing build dependencies (libopencv, libusb)..."
-  apt-get install -y -qq libopencv-dev libusb-dev libusb-1.0-0-dev g++ make 2>/dev/null || true
+  apt-get install -y -qq libopencv-dev libusb-dev libusb-1.0-0-dev \
+    pkg-config g++ make git 2>/dev/null || true
 
   cyan "    Compiling capture binary (this takes a few minutes)..."
   pushd "${ALLSKY_HOME}/src" >/dev/null
@@ -156,11 +157,17 @@ fi
 # Set up Python venv for Allsky's own modules (flow-runner, etc.).
 if [[ ! -d "${ALLSKY_HOME}/venv" ]]; then
   cyan "    Creating Allsky Python venv..."
-  python3 -m venv "${ALLSKY_HOME}/venv"
+  # --system-site-packages lets it use system numpy/opencv if available.
+  python3 -m venv --system-site-packages "${ALLSKY_HOME}/venv"
+  # Explicitly install setuptools first (missing by default on Python 3.12+).
+  "${ALLSKY_HOME}/venv/bin/python3" -m ensurepip --upgrade 2>/dev/null || true
   "${ALLSKY_HOME}/venv/bin/pip" install --quiet --upgrade pip setuptools wheel 2>&1 | tail -1 || true
   # Install Allsky's Python requirements if they exist.
   for req in "${ALLSKY_HOME}/config_repo/requirements"*.txt; do
-    [[ -f "$req" ]] && "${ALLSKY_HOME}/venv/bin/pip" install --quiet -r "$req" 2>&1 | tail -1 || true
+    if [[ -f "$req" ]]; then
+      cyan "    Installing from $(basename "$req")..."
+      "${ALLSKY_HOME}/venv/bin/pip" install --quiet -r "$req" 2>&1 | tail -3 || true
+    fi
   done
   green "    Allsky Python venv created."
 fi
@@ -195,8 +202,9 @@ find "${INSTALL_PREFIX}/backend" -name '__pycache__' -exec rm -rf {} + 2>/dev/nu
 
 VENV="${INSTALL_PREFIX}/backend/.venv"
 if [[ ! -d "${VENV}" ]]; then
-  python3 -m venv "${VENV}"
+  python3 -m venv --system-site-packages "${VENV}"
 fi
+"${VENV}/bin/python3" -m ensurepip --upgrade 2>/dev/null || true
 "${VENV}/bin/pip" install --quiet --upgrade pip wheel setuptools 2>&1 | tail -1 || true
 cyan "    Installing Python packages (first run: 5-15 min on Pi 3B)..."
 "${VENV}/bin/pip" install --quiet "${INSTALL_PREFIX}/backend" 2>&1 | tail -3 || {
