@@ -13,7 +13,7 @@ export default function System() {
   const { data: sys, refetch: refetchSys } = useQuery({
     queryKey: ["system"],
     queryFn: api.system,
-    refetchInterval: 5_000,
+    refetchInterval: 3_000,
   });
 
   const { data: allskyDisk } = useQuery({

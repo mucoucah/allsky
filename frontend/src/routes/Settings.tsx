@@ -63,12 +63,35 @@ export default function Settings() {
     return errs;
   }, [schema, dirty]);
 
+  // Check if any dirty setting has action=reload (requires restart).
+  const needsRestart = useMemo(() => {
+    if (!schema) return false;
+    for (const sections of Object.values(schema)) {
+      for (const defs of Object.values(sections)) {
+        for (const def of defs) {
+          if (def.name in dirty && def.action === "reload") return true;
+        }
+      }
+    }
+    return false;
+  }, [schema, dirty]);
+
   const save = useMutation({
-    mutationFn: () => api.patchSettings(dirty),
-    onSuccess: () => {
+    mutationFn: async (opts?: { restart?: boolean }) => {
+      await api.patchSettings(dirty);
+      if (opts?.restart) {
+        await api.serviceControl("restart");
+      }
+    },
+    onSuccess: (_, opts) => {
       qc.invalidateQueries({ queryKey: ["values"] });
       qc.invalidateQueries({ queryKey: ["audit"] });
-      setMsg(`Saved ${dirtyCount} change${dirtyCount === 1 ? "" : "s"}.`);
+      qc.invalidateQueries({ queryKey: ["system"] });
+      setMsg(
+        opts?.restart
+          ? `Saved ${dirtyCount} change${dirtyCount === 1 ? "" : "s"} and restarted Allsky.`
+          : `Saved ${dirtyCount} change${dirtyCount === 1 ? "" : "s"}.`
+      );
     },
     onError: (e: Error) => setMsg(`Failed: ${e.message}`),
   });
@@ -142,11 +165,23 @@ export default function Settings() {
             disabled={
               dirtyCount === 0 || save.isPending || validationErrors.length > 0
             }
-            onClick={() => save.mutate()}
+            onClick={() => save.mutate({})}
             className="px-3 py-1.5 rounded-lg bg-accent text-bg-base text-sm font-medium disabled:opacity-50"
           >
-            {save.isPending ? "Saving…" : "Save"}
+            {save.isPending ? "Saving\u2026" : "Save"}
           </button>
+          {needsRestart && (
+            <button
+              disabled={
+                dirtyCount === 0 || save.isPending || validationErrors.length > 0
+              }
+              onClick={() => save.mutate({ restart: true })}
+              className="px-3 py-1.5 rounded-lg bg-amber-600 text-white text-sm font-medium disabled:opacity-50"
+              title="Save changes and restart the Allsky camera service"
+            >
+              {save.isPending ? "Saving\u2026" : "Save & Restart"}
+            </button>
+          )}
         </div>
         {msg && <div className="basis-full text-xs text-ink-dim">{msg}</div>}
       </div>
