@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { Camera, MapPin, Check, RefreshCw, Play, Wifi, Settings, Search } from "lucide-react";
@@ -34,9 +34,9 @@ export default function Setup() {
 
   // Pre-fill lat/lon from existing settings when status loads.
   useEffect(() => {
-    if (status?.latitude && !lat) setLat(status.latitude);
-    if (status?.longitude && !lon) setLon(status.longitude);
-  }, [status]);
+    if (status?.latitude) setLat((prev) => prev || status.latitude);
+    if (status?.longitude) setLon((prev) => prev || status.longitude);
+  }, [status?.latitude, status?.longitude]);
 
   const enableCamera = useMutation({ mutationFn: api.enableCamera });
   const reboot = useMutation({ mutationFn: api.reboot });
@@ -246,9 +246,9 @@ function LocationSection({
     },
   });
 
-  const handleLookup = useCallback(() => {
+  const handleLookup = () => {
     if (zipQuery.trim()) geocode.mutate(zipQuery.trim());
-  }, [zipQuery, geocode]);
+  };
 
   return (
     <section className="card">
