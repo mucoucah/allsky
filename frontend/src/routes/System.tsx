@@ -51,9 +51,16 @@ export default function System() {
       </div>
 
       {control.data && (
-        <pre className="card text-xs font-mono whitespace-pre-wrap text-ink-muted overflow-auto max-h-60">
-          {`$ systemctl ${control.data.verb} allsky.service\nexit ${control.data.exit_code}\n${control.data.stdout}${control.data.stderr}`}
-        </pre>
+        <div className={`card text-sm ${control.data.exit_code === 0 ? "text-ok" : "text-warn"}`}>
+          {control.data.exit_code === 0
+            ? `${control.data.verb} completed successfully.`
+            : `${control.data.verb} returned code ${control.data.exit_code}.`}
+          {control.data.stdout && (
+            <pre className="text-xs font-mono text-ink-muted mt-2 whitespace-pre-wrap overflow-auto max-h-40">
+              {control.data.stdout.trim()}
+            </pre>
+          )}
+        </div>
       )}
 
       {/* System tiles */}
