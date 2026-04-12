@@ -44,49 +44,47 @@ export function SettingField({ def, value, onChange, disabled, dirty }: Props) {
   const isAtDefault = hasDefault && String(value) === String(def.default);
   const isBoolean = def.type === "boolean";
 
-  // All inputs are compact — numbers and strings alike.
   const inputCls = `${inputBase} w-28`;
 
+  // Strip HTML tags for plain-text description.
+  const plainDesc = def.description ? def.description.replace(/<[^>]*>/g, '').trim() : "";
+
   return (
-    <div className="flex items-center gap-3 py-[5px] group" title={def.description ? def.description.replace(/<[^>]*>/g, '') : undefined}>
-      {/* Label */}
-      <label htmlFor={id} className="text-xs shrink-0 w-[200px] truncate">
-        <span className="text-ink">{def.label}</span>
-        {def.action === "reload" && (
-          <span className="ml-1 text-[8px] uppercase text-warn">restart</span>
+    <div className="py-[3px]">
+      {/* Row 1: Name | Input | Default */}
+      <div className="flex items-center gap-2">
+        <label htmlFor={id} className="text-xs shrink-0 w-[180px]">
+          <span className="text-ink">{def.label}</span>
+          {def.action === "reload" && (
+            <span className="ml-1 text-[8px] uppercase text-warn">restart</span>
+          )}
+          {dirty && <span className="ml-1 text-[9px] text-accent">&#9679;</span>}
+        </label>
+        {renderWidget(def, value, onChange, disabled, id, inputCls)}
+        {hasDefault && !isBoolean && (
+          <button
+            type="button"
+            className={`text-[10px] shrink-0 font-mono ${
+              isAtDefault ? "text-emerald-400" : "text-accent hover:underline"
+            }`}
+            title={isAtDefault ? "At default" : `Reset to ${def.default}`}
+            onClick={() => { if (!isAtDefault && !disabled) onChange(def.default); }}
+            disabled={disabled || isAtDefault}
+          >
+            {isAtDefault ? "\u2713" : `\u21ba${def.default}`}
+          </button>
         )}
-        {dirty && <span className="ml-1 text-[9px] text-accent">&#9679;</span>}
-      </label>
-
-      {/* Input */}
-      {renderWidget(def, value, onChange, disabled, id, inputCls)}
-
-      {/* Default */}
-      {hasDefault && !isBoolean && (
-        <button
-          type="button"
-          className={`text-[10px] shrink-0 font-mono ${
-            isAtDefault ? "text-emerald-400" : "text-accent hover:underline"
-          }`}
-          title={isAtDefault ? "At default" : `Reset to ${def.default}`}
-          onClick={() => { if (!isAtDefault && !disabled) onChange(def.default); }}
-          disabled={disabled || isAtDefault}
-        >
-          {isAtDefault ? "\u2713" : `\u21ba${def.default}`}
-        </button>
-      )}
-
-      {/* Description — inline, truncated, shows full on hover */}
-      {def.description && (
-        <span
-          className="text-[10px] text-ink-dim truncate hidden lg:inline opacity-60 group-hover:opacity-100 flex-1 min-w-0 [&_a]:text-accent"
-          dangerouslySetInnerHTML={{ __html: fixDocLinks(def.description) }}
-        />
-      )}
-
-      {/* Errors */}
-      {errors.length > 0 && (
-        <span className="text-[10px] text-err shrink-0">{errors.join(", ")}</span>
+      </div>
+      {/* Row 2: Description (one line) + Errors */}
+      {(plainDesc || errors.length > 0) && (
+        <div className="ml-[180px] pl-2 flex gap-3 mt-px">
+          {plainDesc && (
+            <span className="text-[10px] text-ink-dim truncate">{plainDesc}</span>
+          )}
+          {errors.length > 0 && (
+            <span className="text-[10px] text-err shrink-0">{errors.join(", ")}</span>
+          )}
+        </div>
       )}
     </div>
   );
@@ -159,22 +157,28 @@ function renderWidget(
     );
   }
 
-  // Numeric inputs
+  // Numeric inputs — use text input with inputMode for better decimal handling.
   if (def.type === "integer" || def.type === "float" || def.type === "percent") {
     return (
       <input
         id={id}
-        type="number"
+        type="text"
+        inputMode={def.type === "integer" ? "numeric" : "decimal"}
         disabled={disabled}
-        step={def.type === "integer" ? 1 : "any"}
-        min={numericish(def.minimum) ?? undefined}
-        max={numericish(def.maximum) ?? undefined}
         value={value === undefined || value === null ? "" : String(value)}
         onChange={(e) => {
           const raw = e.target.value;
-          if (raw === "") return onChange(null);
-          const n = def.type === "integer" ? parseInt(raw, 10) : parseFloat(raw);
-          onChange(Number.isFinite(n) ? n : raw);
+          if (raw === "" || raw === "-" || raw === ".") return onChange(raw);
+          if (def.type === "integer") {
+            const n = parseInt(raw, 10);
+            onChange(Number.isFinite(n) ? n : raw);
+          } else {
+            // Allow intermediate typing like "1." or "0.5"
+            if (/^-?\d*\.?\d*$/.test(raw)) {
+              const n = parseFloat(raw);
+              onChange(Number.isFinite(n) ? n : raw);
+            }
+          }
         }}
         className={cls}
       />
