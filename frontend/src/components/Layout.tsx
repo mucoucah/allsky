@@ -1,7 +1,7 @@
 import { NavLink, Outlet } from "react-router-dom";
 import {
   LayoutDashboard, Image as ImageIcon, Settings as SettingsIcon,
-  Eraser, BarChart3, Bell, Cpu, Radar,
+  Eraser, BarChart3, Bell, Cpu, Radar, Wrench,
 } from "lucide-react";
 
 const links = [
@@ -12,6 +12,7 @@ const links = [
   { to: "/keograms",       label: "Keograms",       Icon: BarChart3 },
   { to: "/alerts",         label: "Alerts",         Icon: Bell },
   { to: "/notifications",  label: "Notifications",  Icon: Radar },
+  { to: "/setup",          label: "Setup",          Icon: Wrench },
   { to: "/system",         label: "System",         Icon: Cpu },
 ];
 
