@@ -1,52 +1,39 @@
 #!/bin/bash
-# allsky-web uninstaller. Removes everything installed by install.sh.
-# Does NOT touch the upstream Allsky installation.
-set -euo pipefail
 
-SERVICE_USER="${ALLSKY_WEB_USER_NAME:-allskyweb}"
-INSTALL_PREFIX="${INSTALL_PREFIX:-/opt/allsky-web}"
-DATA_DIR="${ALLSKY_WEB_DATA:-/var/lib/allsky-web}"
+[[ -z "${ALLSKY_HOME}" ]] && export ALLSKY_HOME="$( realpath "$( dirname "${BASH_ARGV0}" )" )"
+ME="$( basename "${BASH_ARGV0}" )"
 
-red()   { printf "\033[31m%s\033[0m\n" "$*"; }
-cyan()  { printf "\033[36m%s\033[0m\n" "$*"; }
-green() { printf "\033[32m%s\033[0m\n" "$*"; }
+#shellcheck source-path=.
+source "${ALLSKY_HOME}/variables.sh"			|| exit "${EXIT_ERROR_STOP}"
+#shellcheck source-path=scripts
+source "${ALLSKY_SCRIPTS}/functions.sh"			|| exit "${EXIT_ERROR_STOP}"
 
-if [[ $EUID -ne 0 ]]; then
-  red "Please run with sudo: sudo ./uninstall.sh"
-  exit 1
+cd "${ALLSKY_HOME}"  							|| exit "${EXIT_ERROR_STOP}"
+
+MSG="This will remove all non-config, system files from your computer.\n"
+MSG="${MSG}Note: This only removes files in their default location.\n"
+MSG="${MSG}\nContinue?"
+if whiptail --title "${TITLE}" --yesno "${MSG}" 10 60 3>&1 1>&2 2>&3; then 
+    sudo make uninstall
+
+	echo
+    echo -e "${GREEN}All non-config system files removed.${NC}"
+	echo
+    echo -e "A few things of note:"
+    echo -e "  - To remove ALL traces of 'allsky' (${RED}This cannot be undone!${NC}), run:"
+# TODO: remove everything else, e.g., lighttpd, /var/log/allsky*, ...
+	echo -e "     ${YELLOW}cd${NC}"
+	echo -e "     ${YELLOW}sudo umount tmp${NC}"
+	echo -e "     ${YELLOW}sudo rm -rf allsky${NC}"
+	echo
+    echo -e "  - If you wish to only remove config files, run:"
+	echo -e "     ${YELLOW}sudo make remove_configs${NC}"
+	echo
+    echo -e "  - If you wish to only remove compiled binaries, run:"
+	echo -e "     ${YELLOW}make clean${NC}"
+	echo
+	exit 0
+else
+	echo -e "\n${YELLOW}Nothing removed.${NC}\n"
+	exit 3
 fi
-
-echo ""
-red "This will remove allsky-web and all its data."
-read -rp "Continue? [y/N] " confirm
-if [[ "${confirm,,}" != "y" ]]; then
-  echo "Aborted."
-  exit 0
-fi
-
-cyan "==> Stopping and disabling service"
-systemctl stop allsky-web.service 2>/dev/null || true
-systemctl disable allsky-web.service 2>/dev/null || true
-rm -f /etc/systemd/system/allsky-web.service
-systemctl daemon-reload
-
-cyan "==> Removing sudoers drop-in"
-rm -f /etc/sudoers.d/allsky-web
-
-cyan "==> Removing install directory ${INSTALL_PREFIX}"
-rm -rf "${INSTALL_PREFIX}"
-
-cyan "==> Removing data directory ${DATA_DIR}"
-rm -rf "${DATA_DIR}"
-
-cyan "==> Removing env file"
-rm -rf /etc/allsky-web
-
-cyan "==> Removing service user ${SERVICE_USER}"
-if id -u "${SERVICE_USER}" &>/dev/null; then
-  userdel -r "${SERVICE_USER}" 2>/dev/null || userdel "${SERVICE_USER}" 2>/dev/null || true
-fi
-
-echo ""
-green "allsky-web has been removed."
-green "Your upstream Allsky installation was NOT touched."
