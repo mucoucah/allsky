@@ -2,7 +2,7 @@ import { NavLink, Outlet } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import {
   LayoutDashboard, Image as ImageIcon, Settings as SettingsIcon,
-  Eraser, BarChart3, Bell, Cpu, Radar, Wrench,
+  Eraser, BarChart3, Film, Bell, Cpu, Radar, Wrench,
 } from "lucide-react";
 import { api } from "../lib/api";
 import { LogConsole } from "./LogConsole";
@@ -13,6 +13,7 @@ const links = [
   { to: "/settings",       label: "Settings",       Icon: SettingsIcon },
   { to: "/mask",           label: "Mask",           Icon: Eraser },
   { to: "/keograms",       label: "Keograms",       Icon: BarChart3 },
+  { to: "/videos",         label: "Videos",         Icon: Film },
   { to: "/alerts",         label: "Alerts",         Icon: Bell },
   { to: "/notifications",  label: "Notifications",  Icon: Radar },
   { to: "/setup",          label: "Setup",          Icon: Wrench },
@@ -66,7 +67,7 @@ export default function Layout() {
 
       {/* Bottom nav (mobile) */}
       <nav className="md:hidden fixed bottom-0 inset-x-0 z-30 bg-bg-panel/95 border-t border-bg-raised flex items-center justify-around py-2">
-        {links.slice(0, 5).map(({ to, label, Icon }) => (
+        {links.slice(0, 6).map(({ to, label, Icon }) => (
           <NavLink
             key={to}
             to={to}
