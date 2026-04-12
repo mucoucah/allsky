@@ -14,14 +14,23 @@ router = APIRouter(prefix="/api/system", tags=["system"])
 
 @router.get("")
 async def system_status():
-    return {
-        "host": system_snapshot(),
-        "allsky": {
+    import logging
+    log = logging.getLogger(__name__)
+    try:
+        host = system_snapshot()
+    except Exception as e:
+        log.exception("system_snapshot failed")
+        host = {"error": str(e)}
+    try:
+        allsky = {
             "version": read_version(),
             **read_status(),
             "camera": read_camera_info(),
-        },
-    }
+        }
+    except Exception as e:
+        log.exception("allsky status failed")
+        allsky = {"version": "unknown", "status": "Error", "camera": {}, "error": str(e)}
+    return {"host": host, "allsky": allsky}
 
 
 @router.get("/messages")
@@ -32,7 +41,12 @@ async def messages(limit: int = 50):
 @router.get("/allsky-disk")
 async def allsky_disk():
     """Disk usage breakdown by Allsky directory (images, darks, videos, etc.)."""
-    return allsky_disk_usage()
+    try:
+        return allsky_disk_usage()
+    except Exception:
+        # Permission errors reading home dir — return zeros.
+        return {"images": 0, "darks": 0, "keograms": 0, "startrails": 0,
+                "videos": 0, "config": 0, "tmp": 0}
 
 
 @router.post("/service/{verb}")
