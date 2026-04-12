@@ -200,6 +200,38 @@ fi
 
 green "    Config templates installed."
 
+# Fix camera model name in settings.json to match RPi_cameraInfo.txt.
+# The capture binary does a strcmp on the full model name (e.g. "imx290 60.00 fps")
+# but the setup wizard may have written just the sensor name (e.g. "imx290").
+if command -v python3 &>/dev/null && [[ -f "${ALLSKY_HOME}/config/settings.json" ]] && \
+   [[ -f "${ALLSKY_HOME}/config/RPi_cameraInfo.txt" ]]; then
+  python3 -c "
+import json, sys
+settings_path = '${ALLSKY_HOME}/config/settings.json'
+info_path = '${ALLSKY_HOME}/config/RPi_cameraInfo.txt'
+try:
+    with open(settings_path) as f:
+        settings = json.load(f)
+    model = settings.get('cameramodel', '')
+    if not model or ' ' in model:
+        sys.exit(0)  # already has full name or empty
+    # Look up full model from camera info
+    with open(info_path) as f:
+        for line in f:
+            if line.startswith('camera\t'):
+                parts = line.split('\t')
+                if len(parts) >= 4 and parts[1].strip() == model:
+                    full_model = parts[3].strip()
+                    settings['cameramodel'] = full_model
+                    with open(settings_path, 'w') as out:
+                        json.dump(settings, out, indent=4)
+                    print(f'    Fixed cameramodel: {model} -> {full_model}')
+                    break
+except Exception as e:
+    print(f'    Warning: could not fix cameramodel: {e}')
+" 2>&1
+fi
+
 # Create initial settings.json if missing (first install).
 if [[ ! -f "${ALLSKY_HOME}/config/settings.json" ]]; then
   echo '{"cameratype":"RPi","cameramodel":"","cameranumber":"0","filename":"image.jpg","debuglevel":"1","lastchanged":"1"}' \
