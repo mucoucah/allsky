@@ -1,8 +1,10 @@
 import { NavLink, Outlet } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import {
   LayoutDashboard, Image as ImageIcon, Settings as SettingsIcon,
   Eraser, BarChart3, Bell, Cpu, Radar, Wrench,
 } from "lucide-react";
+import { api } from "../lib/api";
 import { LogConsole } from "./LogConsole";
 
 const links = [
@@ -18,19 +20,21 @@ const links = [
 ];
 
 export default function Layout() {
+  const { data: health } = useQuery({
+    queryKey: ["health"],
+    queryFn: api.health,
+    staleTime: 300_000,
+  });
+
   return (
     <div className="min-h-full flex flex-col">
-      {/* Top bar — always visible. Mobile shows just brand + a burger could go
-          here later, but for now nav lives in a sidebar on >= md and a bottom
-          bar on small screens. */}
       <header className="border-b border-bg-raised bg-bg-panel/80 backdrop-blur sticky top-0 z-20">
         <div className="px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <div className="w-7 h-7 rounded-full bg-accent/20 border border-accent/40" />
             <div className="font-semibold tracking-tight">Allsky</div>
             <div className="text-ink-dim text-xs hidden sm:block">
-              v0.1 · modern web UI
-            </div>
+              v{health?.version ?? "..."}
           </div>
         </div>
       </header>

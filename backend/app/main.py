@@ -61,7 +61,8 @@ async def lifespan(app: FastAPI):
 
 def create_app() -> FastAPI:
     s = get_settings()
-    app = FastAPI(title="allsky-web", version="0.1.0", lifespan=lifespan)
+    from app import __version__
+    app = FastAPI(title="allsky-web", version=__version__, lifespan=lifespan)
 
     app.add_middleware(SessionMiddleware, secret_key=s.session_secret, https_only=False)
     if s.cors_origins:
@@ -90,7 +91,8 @@ def create_app() -> FastAPI:
 
     @app.get("/api/health")
     async def health():
-        return {"ok": True, "version": "0.1.0"}
+        from app import __version__
+        return {"ok": True, "version": __version__}
 
     # Serve the built React frontend when running standalone (no lighttpd).
     # Must come AFTER API routes so /api/* takes priority.
