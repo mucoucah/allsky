@@ -159,9 +159,25 @@ fi
 
 # Create initial settings.json if missing (first install).
 if [[ ! -f "${ALLSKY_HOME}/config/settings.json" ]]; then
-  echo '{"cameratype":"RPi","cameramodel":"","cameranumber":"0","filename":"image.jpg","debuglevel":"1"}' \
+  echo '{"cameratype":"RPi","cameramodel":"","cameranumber":"0","filename":"image.jpg","debuglevel":"1","lastchanged":"1"}' \
     > "${ALLSKY_HOME}/config/settings.json"
   green "    Created initial settings."
+fi
+# Ensure lastchanged exists (required by allsky.sh to know setup was completed).
+if command -v jq &>/dev/null; then
+  if [[ -f "${ALLSKY_HOME}/config/settings.json" ]]; then
+    HAS_LC="$(jq -r '.lastchanged // empty' "${ALLSKY_HOME}/config/settings.json" 2>/dev/null)"
+    if [[ -z "${HAS_LC}" ]]; then
+      jq '. + {"lastchanged": "1"}' "${ALLSKY_HOME}/config/settings.json" > "${ALLSKY_HOME}/config/settings.json.tmp" && \
+        mv "${ALLSKY_HOME}/config/settings.json.tmp" "${ALLSKY_HOME}/config/settings.json"
+      green "    Added lastchanged to settings.json."
+    fi
+  fi
+fi
+# Also sync from web config copy if it has more recent data.
+if [[ -f "${INSTALL_PREFIX}/config/settings.json" ]]; then
+  # Copy web config back to allsky home so camera daemon gets latest settings.
+  cp "${INSTALL_PREFIX}/config/settings.json" "${ALLSKY_HOME}/config/settings.json" 2>/dev/null || true
 fi
 # Always refresh status.
 echo '{"status":"Not configured"}' > "${ALLSKY_HOME}/config/status.json"
