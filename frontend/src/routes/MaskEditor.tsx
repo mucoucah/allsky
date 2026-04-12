@@ -37,7 +37,7 @@ export default function MaskEditor() {
   // Tool state.
   const [tool, setTool] = useState<"draw" | "erase">("draw");
   const [brush, setBrush] = useState(60);
-  const [opacity, setOpacity] = useState(0.5);
+  const opacity = 0.7; // fixed display opacity for visibility while editing
   const [name, setName] = useState("mask.png");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
@@ -205,10 +205,9 @@ export default function MaskEditor() {
       <div className="card bg-accent/5 border-accent/20">
         <h2 className="text-lg font-semibold mb-2">Mask Editor</h2>
         <div className="text-sm text-ink-muted space-y-1">
-          <p><strong>Paint areas to exclude</strong> from capture (e.g. trees, buildings, horizon obstructions).</p>
-          <p>Painted (white) areas will be <strong>blocked/masked out</strong> in captured images. Use <strong>Draw</strong> to paint exclusion zones and <strong>Erase</strong> to remove them.</p>
-          <p>The mask is applied automatically by Allsky during image processing. After saving, restart the camera for changes to take effect.</p>
-          <p className="text-xs text-ink-dim">Tip: Use a large brush for broad areas. The mask is saved at the camera's native resolution.</p>
+          <p><strong>Paint areas to exclude</strong> from all analysis (meteor detection, focus quality, etc.).</p>
+          <p>Painted areas will be <strong>ignored</strong> — no meteor detection, no focus analysis, no exposure calculation in those regions. Use this to block trees, buildings, or horizon obstructions.</p>
+          <p>Use <strong>Draw</strong> to paint exclusion zones and <strong>Erase</strong> to remove them. The captured image is still shown in full — only the analysis is masked.</p>
         </div>
       </div>
 
@@ -241,17 +240,6 @@ export default function MaskEditor() {
           <span className="font-mono w-10 text-right">{brush}</span>
         </div>
 
-        <div className="flex items-center gap-2 text-sm">
-          <span className="text-ink-muted">Opacity</span>
-          <input
-            type="range"
-            min={10}
-            max={100}
-            value={Math.round(opacity * 100)}
-            onChange={(e) => setOpacity(parseInt(e.target.value, 10) / 100)}
-          />
-          <span className="font-mono w-10 text-right">{Math.round(opacity * 100)}%</span>
-        </div>
 
         <div className="flex gap-1">
           <ToolButton

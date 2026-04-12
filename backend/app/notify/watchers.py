@@ -82,7 +82,12 @@ async def meteor_watcher(stop: asyncio.Event) -> None:
             last_mtime = mtime
 
             min_length = cfg.get("min_streak_length", 100)
-            result = detect_meteor(target, min_length=min_length, annotate=True)
+            # Find the mask file if it exists.
+            mask_path = paths().masks_dir / "mask.png"
+            result = detect_meteor(
+                target, min_length=min_length, annotate=True,
+                mask_path=mask_path if mask_path.exists() else None,
+            )
             if result.meteor_count > 0:
                 # Dedup: one alert per day.
                 today = date.today().isoformat()
@@ -145,7 +150,11 @@ async def focus_watcher(stop: asyncio.Event) -> None:
             threshold_pct = cfg.get("threshold_pct", 60)
             needed = cfg.get("consecutive_failures_to_alert", 5)
 
-            result = assess_focus(target, baseline, threshold_pct)
+            mask_path = paths().masks_dir / "mask.png"
+            result = assess_focus(
+                target, baseline, threshold_pct,
+                mask_path=mask_path if mask_path.exists() else None,
+            )
             if result["status"] == "soft":
                 consecutive_soft += 1
                 log.debug("focus_watcher: soft (%d/%d)", consecutive_soft, needed)

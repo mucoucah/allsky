@@ -21,8 +21,12 @@ log = logging.getLogger(__name__)
 _MAX_DIM = 800
 
 
-def sharpness_score(image_path: Path) -> float | None:
-    """Return the variance-of-Laplacian for the given image, or None on error."""
+def sharpness_score(image_path: Path, mask_path: Path | None = None) -> float | None:
+    """Return the variance-of-Laplacian for the given image, or None on error.
+
+    If a mask is provided, masked (white) areas are excluded from the
+    sharpness calculation — so trees/buildings don't affect focus scores.
+    """
     img = cv2.imread(str(image_path), cv2.IMREAD_GRAYSCALE)
     if img is None:
         return None
@@ -32,13 +36,25 @@ def sharpness_score(image_path: Path) -> float | None:
         scale = _MAX_DIM / max(h, w)
         img = cv2.resize(img, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_AREA)
 
+    # Apply mask — exclude white (painted) regions.
+    if mask_path and mask_path.exists():
+        mask = cv2.imread(str(mask_path), cv2.IMREAD_GRAYSCALE)
+        if mask is not None:
+            mask = cv2.resize(mask, (img.shape[1], img.shape[0]))
+            # Invert: white painted areas become black (excluded).
+            mask_inv = cv2.bitwise_not(mask)
+            img = cv2.bitwise_and(img, img, mask=mask_inv)
+
     lap = cv2.Laplacian(img, cv2.CV_64F)
     return float(lap.var())
 
 
-def assess_focus(image_path: Path, baseline: float | None, threshold_pct: float) -> dict:
+def assess_focus(
+    image_path: Path, baseline: float | None, threshold_pct: float,
+    mask_path: Path | None = None,
+) -> dict:
     """Return a dict with score, baseline, status ('ok'|'soft'|'unknown')."""
-    score = sharpness_score(image_path)
+    score = sharpness_score(image_path, mask_path=mask_path)
     if score is None:
         return {"score": None, "baseline": baseline, "status": "unknown", "threshold": None}
 
