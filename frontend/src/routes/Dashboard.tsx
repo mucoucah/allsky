@@ -1,4 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
+import { Link } from "react-router-dom";
+import { Wrench } from "lucide-react";
 import { api, fileUrl } from "../lib/api";
 import { useLiveSocket } from "../hooks/useLiveSocket";
 import { Tile } from "../components/Tile";
@@ -41,8 +43,29 @@ export default function Dashboard() {
     refetchInterval: 10_000,
   });
 
+  const { data: setupStatus } = useQuery({
+    queryKey: ["setupStatus"],
+    queryFn: api.setupStatus,
+    staleTime: 60_000,
+  });
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      {/* Setup banner for fresh installs */}
+      {setupStatus && !setupStatus.has_camera && (
+        <Link
+          to="/setup"
+          className="lg:col-span-3 card border-accent/40 bg-accent/5 flex items-center gap-4 hover:bg-accent/10 transition-colors"
+        >
+          <Wrench size={32} className="text-accent shrink-0" />
+          <div>
+            <div className="font-semibold text-accent">Camera not configured</div>
+            <div className="text-sm text-ink-muted">
+              Click here to run the setup wizard — detect your camera and configure initial settings.
+            </div>
+          </div>
+        </Link>
+      )}
       {/* Live view — spans 2 cols on desktop. */}
       <section className="card lg:col-span-2 flex flex-col gap-3">
         <div className="flex items-center justify-between">

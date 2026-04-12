@@ -20,7 +20,7 @@ from app.allsky.watcher import watch_latest_image
 from app.config import get_settings
 from app.db import init_db
 from app.notify.watchers import focus_watcher, meteor_watcher
-from app.routers import alerts, auth, images, keograms, live, logs, masks, notifications, settings, system
+from app.routers import alerts, auth, images, keograms, live, logs, masks, notifications, settings, setup, system
 from app.ws.manager import LiveBroadcaster
 
 log = logging.getLogger("allskyweb")
@@ -84,6 +84,7 @@ def create_app() -> FastAPI:
         auth.router,
         notifications.router,
         logs.router,
+        setup.router,
     ):
         app.include_router(r)
 

@@ -87,6 +87,19 @@ export interface ImageRow {
 
 export const api = {
   health: () => request<{ ok: boolean; version: string }>("/health"),
+
+  // Setup wizard
+  setupStatus: () => request<{
+    configured: boolean; has_camera: boolean; allsky_status: string;
+    camera_type: string | null; camera_model: string | null;
+  }>("/setup/status"),
+  detectCameras: () => request<{
+    cameras: Array<{ index: number; model: string; info: string; modes: string[] }>;
+  }>("/setup/detect-cameras"),
+  configure: (body: {
+    camera_type?: string; camera_model?: string; camera_number?: number;
+    latitude?: string; longitude?: string;
+  }) => request<{ ok: boolean }>("/setup/configure", { method: "POST", json: body }),
   system: () => request<SystemSnapshot>("/system"),
   messages: () => request<Array<{ type: string; timestamp: string; id: string; message: string }>>(
     "/system/messages",

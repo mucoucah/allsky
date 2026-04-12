@@ -7,6 +7,7 @@ import MaskEditor from "./routes/MaskEditor";
 import Keograms from "./routes/Keograms";
 import Alerts from "./routes/Alerts";
 import Notifications from "./routes/Notifications";
+import Setup from "./routes/Setup";
 import System from "./routes/System";
 
 export default function App() {
@@ -20,6 +21,7 @@ export default function App() {
         <Route path="keograms" element={<Keograms />} />
         <Route path="alerts" element={<Alerts />} />
         <Route path="notifications" element={<Notifications />} />
+        <Route path="setup" element={<Setup />} />
         <Route path="system" element={<System />} />
       </Route>
     </Routes>
