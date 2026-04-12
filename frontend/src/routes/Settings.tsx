@@ -15,8 +15,12 @@ import { SettingField } from "../components/SettingField";
  *    out to upstream's makeChanges.sh for application. */
 export default function Settings() {
   const qc = useQueryClient();
-  const { data: schema } = useQuery({ queryKey: ["schema"], queryFn: api.settingsSchema });
-  const { data: values } = useQuery({ queryKey: ["values"], queryFn: api.settingsValues });
+  const { data: schema, error: schemaErr, isError: schemaFailed } = useQuery({
+    queryKey: ["schema"], queryFn: api.settingsSchema, retry: 2,
+  });
+  const { data: values, error: valuesErr, isError: valuesFailed } = useQuery({
+    queryKey: ["values"], queryFn: api.settingsValues, retry: 2,
+  });
   const { data: audit } = useQuery({ queryKey: ["audit"], queryFn: api.settingsAudit });
 
   const [draft, setDraft] = useState<Record<string, unknown>>({});
@@ -74,6 +78,23 @@ export default function Settings() {
     setMsg(null);
   }
 
+  if (schemaFailed || valuesFailed) {
+    return (
+      <div className="card text-err">
+        <h2 className="text-lg font-semibold mb-2">Settings failed to load</h2>
+        {schemaErr && <p className="text-sm mb-1">Schema: {String(schemaErr)}</p>}
+        {valuesErr && <p className="text-sm mb-1">Values: {String(valuesErr)}</p>}
+        <p className="text-xs text-ink-muted mt-2">
+          Check the System page log viewer for backend errors.
+          The options.json file may be missing or unreadable.
+        </p>
+        <a href="/api/settings/debug" target="_blank" rel="noreferrer"
+          className="text-xs text-accent underline mt-2 inline-block">
+          Open debug info
+        </a>
+      </div>
+    );
+  }
   if (!schema || !values) return <div className="text-ink-dim">loading schema…</div>;
 
   const lower = search.trim().toLowerCase();

@@ -3,6 +3,7 @@ import {
   LayoutDashboard, Image as ImageIcon, Settings as SettingsIcon,
   Eraser, BarChart3, Bell, Cpu, Radar, Wrench,
 } from "lucide-react";
+import { LogConsole } from "./LogConsole";
 
 const links = [
   { to: "/",               label: "Dashboard",     Icon: LayoutDashboard },
@@ -76,6 +77,9 @@ export default function Layout() {
           </NavLink>
         ))}
       </nav>
+
+      {/* Floating log console — available on every page */}
+      <LogConsole />
     </div>
   );
 }
