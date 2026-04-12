@@ -8,7 +8,7 @@
 #   sudo ./install.sh
 #
 # What it does:
-#   1. Installs OS packages (python, node, opencv deps, lighttpd, etc.)
+#   1. Installs OS packages (python, node, opencv deps, libcamera, etc.)
 #   2. Runs upstream Allsky setup (compiles capture binary, creates services)
 #   3. Installs the modern Python/React web UI alongside the legacy one
 #   4. Creates a systemd service for the new web UI
@@ -52,11 +52,10 @@ apt-get install -y -qq \
   curl rsync jq bc \
   2>/dev/null || true
 
-# Allsky's own dependencies (from upstream requirements).
+# Allsky's own dependencies (no lighttpd/PHP — our FastAPI replaces the legacy web UI).
 apt-get install -y -qq \
   libatlas-base-dev libhdf5-dev libopenjp2-7 \
-  imagemagick lighttpd php-cgi php-gd \
-  libcamera-apps python3-libcamera \
+  imagemagick libcamera-apps python3-libcamera \
   2>/dev/null || true
 
 # libtiff varies by Debian version.
@@ -176,7 +175,7 @@ fi
 REAL_USER="${SUDO_USER:-pi}"
 REAL_GROUP="$(id -gn "${REAL_USER}" 2>/dev/null || echo "${REAL_USER}")"
 chown -R "${REAL_USER}:${REAL_GROUP}" "${ALLSKY_HOME}"
-# lighttpd needs write access to tmp/
+# Web UI service user needs write access to tmp/
 chmod 775 "${ALLSKY_HOME}/tmp" 2>/dev/null || true
 
 green "    Allsky backend setup done."
