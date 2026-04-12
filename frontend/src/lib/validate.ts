@@ -4,7 +4,8 @@ import type { SettingDef } from "./api";
 export function fieldErrors(def: SettingDef, value: unknown): string[] {
   const errs: string[] = [];
   if (def.type === "boolean") {
-    if (typeof value !== "boolean") errs.push("must be a boolean");
+    // Accept actual booleans and string booleans (upstream stores "true"/"false").
+    if (typeof value !== "boolean" && typeof value !== "string") errs.push("must be a boolean");
     return errs;
   }
   if (def.type === "integer") {

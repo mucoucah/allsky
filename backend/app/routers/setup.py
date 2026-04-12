@@ -46,7 +46,8 @@ async def setup_status():
 @router.get("/detect-cameras")
 async def cameras():
     """Detect connected cameras via libcamera/rpicam."""
-    return {"cameras": await detect_cameras()}
+    result = await detect_cameras()
+    return {"cameras": result}
 
 
 @router.post("/configure")

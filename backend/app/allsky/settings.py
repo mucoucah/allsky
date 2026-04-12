@@ -103,12 +103,37 @@ def load_schema() -> list[SettingDef]:
 
 
 def load_values() -> dict[str, Any]:
-    """Read the active settings.json. Returns {} if Allsky isn't installed yet."""
+    """Read the active settings.json. Returns {} if Allsky isn't installed yet.
+
+    Upstream Allsky stores booleans as "true"/"false" strings and numbers as
+    strings. We coerce them to proper Python types based on the schema so the
+    frontend gets clean data.
+    """
     settings_path = paths().settings_file
     if not settings_path.exists():
         return {}
     with settings_path.open() as f:
-        return json.load(f)
+        raw = json.load(f)
+
+    # Coerce values based on schema types.
+    schema_by_name = {d.name: d for d in load_schema()}
+    for key, value in list(raw.items()):
+        d = schema_by_name.get(key)
+        if d is None:
+            continue
+        if d.type == "boolean" and isinstance(value, str):
+            raw[key] = value.lower() in ("true", "1", "yes", "on")
+        elif d.type in ("integer",) and isinstance(value, str):
+            try:
+                raw[key] = int(value)
+            except ValueError:
+                pass
+        elif d.type in ("float", "percent") and isinstance(value, str):
+            try:
+                raw[key] = float(value)
+            except ValueError:
+                pass
+    return raw
 
 
 def save_values(values: dict[str, Any]) -> None:
@@ -169,14 +194,17 @@ def validate_patch(patch: dict[str, Any]) -> list[str]:
     errors: list[str] = []
     schema_by_name = {d.name: d for d in load_schema()}
 
-    for key, value in patch.items():
+    for key, value in list(patch.items()):
         d = schema_by_name.get(key)
         if d is None:
-            errors.append(f"Unknown setting: {key!r}")
+            # Don't reject unknown settings — upstream may add new ones.
             continue
 
+        # Coerce string booleans to real booleans before validation.
         if d.type == "boolean":
-            if not isinstance(value, bool):
+            if isinstance(value, str):
+                patch[key] = value.lower() in ("true", "1", "yes", "on")
+            elif not isinstance(value, bool):
                 errors.append(f"{key}: expected boolean, got {type(value).__name__}")
             continue
 
