@@ -172,6 +172,33 @@ if [[ -f "${ALLSKY_HOME}/src/capture_RPi" ]]; then
   green "    Capture binaries installed."
 fi
 
+# Install sunwait (sunrise/sunset calculator) to PATH.
+# The capture binary calls "sunwait" to determine day/night.
+SUNWAIT_BIN=""
+if [[ -f "${ALLSKY_HOME}/src/sunwait-src/sunwait" ]]; then
+  SUNWAIT_BIN="${ALLSKY_HOME}/src/sunwait-src/sunwait"
+elif [[ -f "${ALLSKY_HOME}/bin/sunwait" ]]; then
+  SUNWAIT_BIN="${ALLSKY_HOME}/bin/sunwait"
+fi
+if [[ -n "${SUNWAIT_BIN}" ]]; then
+  cp "${SUNWAIT_BIN}" /usr/local/bin/sunwait
+  chmod +x /usr/local/bin/sunwait
+  green "    sunwait installed to /usr/local/bin/."
+elif ! command -v sunwait &>/dev/null; then
+  # Try to compile sunwait if source exists.
+  if [[ -f "${ALLSKY_HOME}/src/sunwait-src/sunwait.c" ]]; then
+    cyan "    Compiling sunwait..."
+    pushd "${ALLSKY_HOME}/src/sunwait-src" >/dev/null
+    make -j"$(nproc)" 2>&1 | tail -3 || true
+    popd >/dev/null
+    if [[ -f "${ALLSKY_HOME}/src/sunwait-src/sunwait" ]]; then
+      cp "${ALLSKY_HOME}/src/sunwait-src/sunwait" /usr/local/bin/sunwait
+      chmod +x /usr/local/bin/sunwait
+      green "    sunwait compiled and installed."
+    fi
+  fi
+fi
+
 # Always copy the options schema (it defines all settings for the web UI).
 # This is safe to overwrite — it's a read-only schema, not user data.
 if [[ -f "${ALLSKY_HOME}/config_repo/options.json.repo" ]]; then
