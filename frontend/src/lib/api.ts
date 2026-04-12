@@ -127,6 +127,10 @@ export const api = {
   enableCamera: () => request<{ results: unknown[]; needs_reboot: boolean; message: string }>(
     "/setup/enable-camera", { method: "POST" },
   ),
+  geocode: (q: string) => request<{
+    found: boolean; latitude?: string; longitude?: string;
+    display_name?: string; city?: string; state?: string; country?: string;
+  }>(`/setup/geocode?q=${encodeURIComponent(q)}`),
   cameraOverlays: () => request<{
     overlays: Record<string, { known: boolean; sensor: string; overlay: string; label: string; installed: boolean }>;
   }>("/setup/camera-overlays"),

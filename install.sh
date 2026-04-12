@@ -200,35 +200,42 @@ fi
 
 green "    Config templates installed."
 
-# Fix camera model name in settings.json to match RPi_cameraInfo.txt.
-# The capture binary does a strcmp on the full model name (e.g. "imx290 60.00 fps")
-# but the setup wizard may have written just the sensor name (e.g. "imx290").
-if command -v python3 &>/dev/null && [[ -f "${ALLSKY_HOME}/config/settings.json" ]] && \
-   [[ -f "${ALLSKY_HOME}/config/RPi_cameraInfo.txt" ]]; then
+# Fix camera model name and ensure cameranumber is a string in ALL settings copies.
+if command -v python3 &>/dev/null && [[ -f "${ALLSKY_HOME}/config/RPi_cameraInfo.txt" ]]; then
   python3 -c "
-import json, sys
-settings_path = '${ALLSKY_HOME}/config/settings.json'
+import json, sys, os
 info_path = '${ALLSKY_HOME}/config/RPi_cameraInfo.txt'
-try:
-    with open(settings_path) as f:
-        settings = json.load(f)
-    model = settings.get('cameramodel', '')
-    if not model or ' ' in model:
-        sys.exit(0)  # already has full name or empty
-    # Look up full model from camera info
-    with open(info_path) as f:
-        for line in f:
-            if line.startswith('camera\t'):
-                parts = line.split('\t')
-                if len(parts) >= 4 and parts[1].strip() == model:
-                    full_model = parts[3].strip()
-                    settings['cameramodel'] = full_model
-                    with open(settings_path, 'w') as out:
-                        json.dump(settings, out, indent=4)
-                    print(f'    Fixed cameramodel: {model} -> {full_model}')
-                    break
-except Exception as e:
-    print(f'    Warning: could not fix cameramodel: {e}')
+# Fix both allsky home and web config copies.
+paths = ['${ALLSKY_HOME}/config/settings.json', '${INSTALL_PREFIX}/config/settings.json']
+for settings_path in paths:
+    try:
+        if not os.path.exists(settings_path):
+            continue
+        with open(settings_path) as f:
+            settings = json.load(f)
+        changed = False
+        # Fix model name: sensor only -> full model from camera info.
+        model = settings.get('cameramodel', '')
+        if model and ' ' not in model:
+            with open(info_path) as f:
+                for line in f:
+                    if line.startswith('camera\t'):
+                        parts = line.split('\t')
+                        if len(parts) >= 4 and parts[1].strip() == model:
+                            settings['cameramodel'] = parts[3].strip()
+                            changed = True
+                            print(f'    Fixed cameramodel in {settings_path}: {model} -> {settings[\"cameramodel\"]}')
+                            break
+        # Ensure cameranumber is a string (capture binary expects string).
+        cn = settings.get('cameranumber')
+        if isinstance(cn, int):
+            settings['cameranumber'] = str(cn)
+            changed = True
+        if changed:
+            with open(settings_path, 'w') as out:
+                json.dump(settings, out, indent=4)
+    except Exception as e:
+        print(f'    Warning: could not fix {settings_path}: {e}')
 " 2>&1
 fi
 

@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
-import { Camera, MapPin, Check, RefreshCw, Play, Wifi, Settings } from "lucide-react";
+import { Camera, MapPin, Check, RefreshCw, Play, Wifi, Settings, Search } from "lucide-react";
 import { api } from "../lib/api";
 
 /** Full setup wizard — user never needs a terminal after install.sh.
@@ -193,42 +193,13 @@ export default function Setup() {
         ) : null}
       </section>
 
-      {/* Step 2: Location */}
-      <section className="card">
-        <h2 className="text-lg font-semibold flex items-center gap-2 mb-3">
-          <MapPin size={20} /> 2. Location (optional)
-        </h2>
-        <p className="text-xs text-ink-dim mb-3">
-          Used for day/night calculation and constellation overlays.
-        </p>
-        <div className="grid grid-cols-2 gap-3">
-          <label className="flex flex-col gap-1">
-            <span className="text-xs text-ink-muted">Latitude</span>
-            <input
-              type="text"
-              placeholder="e.g. 51.5074"
-              value={lat}
-              onChange={(e) => setLat(e.target.value)}
-              className="bg-bg-base border border-bg-raised rounded-lg px-2 py-1 text-sm font-mono"
-            />
-          </label>
-          <label className="flex flex-col gap-1">
-            <span className="text-xs text-ink-muted">Longitude</span>
-            <input
-              type="text"
-              placeholder="e.g. -0.1278"
-              value={lon}
-              onChange={(e) => setLon(e.target.value)}
-              className="bg-bg-base border border-bg-raised rounded-lg px-2 py-1 text-sm font-mono"
-            />
-          </label>
-        </div>
-      </section>
+      {/* Step 2: Location (required) */}
+      <LocationSection lat={lat} lon={lon} setLat={setLat} setLon={setLon} />
 
       {/* Save + Start */}
       <button
         onClick={() => configure.mutate()}
-        disabled={configure.isPending || !cameras?.cameras.length}
+        disabled={configure.isPending || !cameras?.cameras.length || !lat || !lon}
         className="w-full py-3 rounded-xl bg-accent text-bg-base text-lg font-semibold disabled:opacity-50 inline-flex items-center justify-center gap-2"
       >
         <Play size={20} />
@@ -241,6 +212,110 @@ export default function Setup() {
         </div>
       )}
     </div>
+  );
+}
+
+/* ── Location section with zip code lookup ──────────────────── */
+
+function LocationSection({
+  lat, lon, setLat, setLon,
+}: {
+  lat: string; lon: string;
+  setLat: (v: string) => void; setLon: (v: string) => void;
+}) {
+  const [zipQuery, setZipQuery] = useState("");
+  const [locationName, setLocationName] = useState("");
+  const geocode = useMutation({
+    mutationFn: (q: string) => api.geocode(q),
+    onSuccess: (data) => {
+      if (data.found && data.latitude && data.longitude) {
+        setLat(data.latitude);
+        setLon(data.longitude);
+        const parts = [data.city, data.state, data.country].filter(Boolean);
+        setLocationName(parts.join(", ") || data.display_name || "");
+      }
+    },
+  });
+
+  const handleLookup = useCallback(() => {
+    if (zipQuery.trim()) geocode.mutate(zipQuery.trim());
+  }, [zipQuery, geocode]);
+
+  return (
+    <section className="card">
+      <h2 className="text-lg font-semibold flex items-center gap-2 mb-1">
+        <MapPin size={20} /> 2. Location
+        <span className="text-xs text-red-400 font-normal">(required)</span>
+      </h2>
+      <p className="text-xs text-ink-dim mb-3">
+        Required for day/night calculation. The camera uses different settings for day vs night.
+      </p>
+
+      {/* Zip code / city lookup */}
+      <div className="flex gap-2 mb-3">
+        <input
+          type="text"
+          placeholder="Enter zip code or city name..."
+          value={zipQuery}
+          onChange={(e) => setZipQuery(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && handleLookup()}
+          className="bg-bg-base border border-bg-raised rounded-lg px-3 py-1.5 text-sm flex-1"
+        />
+        <button
+          onClick={handleLookup}
+          disabled={!zipQuery.trim() || geocode.isPending}
+          className="px-4 py-1.5 rounded-lg bg-accent text-bg-base text-sm font-medium disabled:opacity-50 inline-flex items-center gap-1.5"
+        >
+          <Search size={14} />
+          {geocode.isPending ? "Looking up..." : "Look up"}
+        </button>
+      </div>
+
+      {locationName && (
+        <div className="text-sm text-ok mb-3 flex items-center gap-1.5">
+          <Check size={14} /> {locationName}
+        </div>
+      )}
+      {geocode.isError && (
+        <div className="text-xs text-err mb-3">Lookup failed. Enter coordinates manually below.</div>
+      )}
+      {geocode.isSuccess && !geocode.data?.found && (
+        <div className="text-xs text-warn mb-3">Location not found. Try a different search or enter coordinates manually.</div>
+      )}
+
+      {/* Manual lat/lon */}
+      <div className="grid grid-cols-2 gap-3">
+        <label className="flex flex-col gap-1">
+          <span className="text-xs text-ink-muted">Latitude <span className="text-red-400">*</span></span>
+          <input
+            type="text"
+            placeholder="e.g. 27.8006"
+            value={lat}
+            onChange={(e) => setLat(e.target.value)}
+            className={`bg-bg-base border rounded-lg px-2 py-1 text-sm font-mono ${
+              lat ? "border-bg-raised" : "border-red-500/50"
+            }`}
+          />
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className="text-xs text-ink-muted">Longitude <span className="text-red-400">*</span></span>
+          <input
+            type="text"
+            placeholder="e.g. -97.3964"
+            value={lon}
+            onChange={(e) => setLon(e.target.value)}
+            className={`bg-bg-base border rounded-lg px-2 py-1 text-sm font-mono ${
+              lon ? "border-bg-raised" : "border-red-500/50"
+            }`}
+          />
+        </label>
+      </div>
+      {(!lat || !lon) && (
+        <p className="text-xs text-red-400 mt-2">
+          Latitude and longitude are required. Enter a zip code above or type coordinates manually.
+        </p>
+      )}
+    </section>
   );
 }
 
