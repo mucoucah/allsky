@@ -36,6 +36,7 @@ class MeteorResult:
 def detect(
     image_path: Path,
     min_length: int = 100,
+    max_length: int = 0,
     annotate: bool = True,
     mask_path: Path | None = None,
 ) -> MeteorResult:
@@ -85,17 +86,40 @@ def detect(
         minLineLength=min_length, maxLineGap=20,
     )
 
+    # Satellite / plane discrimination heuristics.
+    # Satellites: very long, consistent brightness along their length.
+    # Planes: dashed appearance from nav-light blink, often parallel lines.
+    # Meteors: shorter, brightness varies (usually brighter at one end).
+    # We use two filters:
+    #   1. max_length — exclude lines longer than a threshold (satellites
+    #      span most of the frame; meteors rarely exceed ~30% of diagonal).
+    #   2. Brightness uniformity — measure pixel intensity variance along the
+    #      streak; satellites have low variance, meteors high (they flare).
+    diag = np.sqrt(gray.shape[0] ** 2 + gray.shape[1] ** 2)
+    effective_max = max_length if max_length > 0 else int(diag * 0.4)
+
     result = MeteorResult()
     if lines_raw is not None:
         result.line_count = lines_raw.shape[0]
         for i in range(lines_raw.shape[0]):
             for x1, y1, x2, y2 in lines_raw[i]:
                 length = np.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2)
-                if length >= min_length:
-                    result.meteor_count += 1
-                    result.lines.append((int(x1), int(y1), int(x2), int(y2)))
+                if length < min_length:
+                    continue
+                # Filter 1: too long → likely satellite.
+                if length > effective_max:
                     if annotate:
-                        cv2.line(img, (x1, y1), (x2, y2), (0, 255, 0), 3)
+                        cv2.line(img, (x1, y1), (x2, y2), (0, 0, 255), 1)  # red = rejected
+                    continue
+                # Filter 2: brightness uniformity → likely satellite if very uniform.
+                if _is_uniform_brightness(gray, x1, y1, x2, y2):
+                    if annotate:
+                        cv2.line(img, (x1, y1), (x2, y2), (255, 165, 0), 1)  # orange = rejected
+                    continue
+                result.meteor_count += 1
+                result.lines.append((int(x1), int(y1), int(x2), int(y2)))
+                if annotate:
+                    cv2.line(img, (x1, y1), (x2, y2), (0, 255, 0), 3)
 
     if annotate and result.meteor_count > 0:
         # Add text overlay.
@@ -105,3 +129,25 @@ def detect(
         result.annotated_jpeg = buf.tobytes()
 
     return result
+
+
+def _is_uniform_brightness(
+    gray: np.ndarray, x1: int, y1: int, x2: int, y2: int,
+    uniformity_threshold: float = 0.15,
+) -> bool:
+    """Sample pixel brightness along a line segment and check if the coefficient
+    of variation (std/mean) is below a threshold. Satellites have very uniform
+    brightness; meteors flare and fade."""
+    num_samples = max(10, int(np.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2) / 3))
+    xs = np.linspace(x1, x2, num_samples).astype(int)
+    ys = np.linspace(y1, y2, num_samples).astype(int)
+    # Clamp to image bounds.
+    h, w = gray.shape[:2]
+    xs = np.clip(xs, 0, w - 1)
+    ys = np.clip(ys, 0, h - 1)
+    values = gray[ys, xs].astype(float)
+    mean = values.mean()
+    if mean < 10:
+        return False  # too dim to judge
+    cv = values.std() / mean
+    return cv < uniformity_threshold

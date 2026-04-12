@@ -20,7 +20,7 @@ from app.allsky.watcher import watch_latest_image
 from app.config import get_settings
 from app.db import init_db
 from app.notify.watchers import focus_watcher, meteor_watcher
-from app.routers import alerts, auth, images, keograms, live, masks, notifications, settings, system
+from app.routers import alerts, auth, images, keograms, live, logs, masks, notifications, settings, system
 from app.ws.manager import LiveBroadcaster
 
 log = logging.getLogger("allskyweb")
@@ -83,6 +83,7 @@ def create_app() -> FastAPI:
         alerts.router,
         auth.router,
         notifications.router,
+        logs.router,
     ):
         app.include_router(r)
 
@@ -90,7 +91,51 @@ def create_app() -> FastAPI:
     async def health():
         return {"ok": True, "version": "0.1.0"}
 
+    # Serve the built React frontend when running standalone (no lighttpd).
+    # Must come AFTER API routes so /api/* takes priority.
+    _mount_frontend(app)
+
     return app
+
+
+def _mount_frontend(app: FastAPI) -> None:
+    """Mount the React SPA if the dist directory exists."""
+    from pathlib import Path
+    from fastapi.staticfiles import StaticFiles
+    from starlette.responses import FileResponse
+
+    # Check two locations: sibling frontend/dist (dev) and /opt/allsky-web/frontend/dist (prod).
+    candidates = [
+        Path(__file__).resolve().parents[2] / "frontend" / "dist",
+        Path("/opt/allsky-web/frontend/dist"),
+    ]
+    dist = next((c for c in candidates if c.is_dir()), None)
+    if not dist:
+        return
+
+    index_html = dist / "index.html"
+
+    # Static assets (JS, CSS, images).
+    assets = dist / "assets"
+    if assets.is_dir():
+        app.mount("/assets", StaticFiles(directory=str(assets)), name="assets")
+
+    # Serve favicon and other root files.
+    for f in dist.iterdir():
+        if f.is_file() and f.name != "index.html":
+            name = f.name
+            # Closure capture needs explicit binding.
+            def _make_route(filepath: Path):
+                @app.get(f"/{filepath.name}", include_in_schema=False)
+                async def _serve():
+                    return FileResponse(str(filepath))
+            _make_route(f)
+
+    # SPA fallback: everything else → index.html.
+    if index_html.exists():
+        @app.get("/{path:path}", include_in_schema=False)
+        async def spa_fallback(path: str):
+            return FileResponse(str(index_html))
 
 
 app = create_app()

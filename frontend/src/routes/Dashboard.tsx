@@ -35,6 +35,12 @@ export default function Dashboard() {
     refetchInterval: 15_000,
   });
 
+  const { data: focus } = useQuery({
+    queryKey: ["focusCurrent"],
+    queryFn: api.currentFocus,
+    refetchInterval: 10_000,
+  });
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
       {/* Live view — spans 2 cols on desktop. */}
@@ -130,6 +136,16 @@ export default function Dashboard() {
             }
           />
         </>
+      )}
+
+      {/* Focus quality tile */}
+      {focus && focus.score != null && (
+        <Tile
+          label="Focus quality"
+          value={focus.score.toFixed(0)}
+          hint={focus.baseline != null ? `baseline ${focus.baseline.toFixed(0)}` : "uncalibrated"}
+          status={focus.status === "ok" ? "ok" : focus.status === "soft" ? "err" : undefined}
+        />
       )}
 
       {/* Messages */}
