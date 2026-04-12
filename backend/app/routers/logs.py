@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 
 from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
@@ -9,19 +10,42 @@ from fastapi.responses import PlainTextResponse
 
 from app.allsky.paths import paths
 
+log = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/logs", tags=["logs"])
 
 
 @router.get("/allsky")
 async def tail_allsky(lines: int = Query(200, ge=1, le=5000)):
-    """Return the last N lines of /var/log/allsky.log."""
+    """Return the last N lines of /var/log/allsky.log.
+
+    Falls back to journalctl for the allsky service if the log file doesn't exist.
+    """
     p = paths().allsky_log
-    if not p.exists():
-        return PlainTextResponse("(log file not found)", status_code=404)
+    if p.exists():
+        try:
+            return PlainTextResponse(_tail(str(p), lines))
+        except OSError as e:
+            log.warning("Failed to read %s: %s", p, e)
+
+    # Fallback: try journalctl for the allsky.service
     try:
-        return PlainTextResponse(_tail(str(p), lines))
-    except OSError as e:
-        return PlainTextResponse(f"(error reading log: {e})", status_code=500)
+        proc = await asyncio.create_subprocess_exec(
+            "journalctl", "-u", "allsky", "--no-pager", "-n", str(lines),
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=10)
+        text = (stdout or b"").decode(errors="replace").strip()
+        if text:
+            return PlainTextResponse(text)
+    except Exception:
+        pass
+
+    return PlainTextResponse(
+        "(No allsky logs found. The camera service may not have run yet.)\n"
+        f"Checked: {p}\n"
+        "Also tried: journalctl -u allsky"
+    )
 
 
 @router.get("/webui")

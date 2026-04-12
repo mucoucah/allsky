@@ -41,14 +41,36 @@ async def debug():
     """Debug endpoint — shows what the backend sees for settings files."""
     p = paths()
     import json
+    import os
+
+    def _file_info(path):
+        info = {"path": str(path), "exists": path.exists()}
+        if path.exists():
+            try:
+                st = path.stat()
+                info["size"] = st.st_size
+                info["uid"] = st.st_uid
+                info["gid"] = st.st_gid
+                info["mode"] = oct(st.st_mode)
+            except OSError as e:
+                info["stat_error"] = str(e)
+            try:
+                path.open("r").close()
+                info["readable"] = True
+            except OSError as e:
+                info["readable"] = False
+                info["read_error"] = str(e)
+        return info
+
     result = {
         "allsky_home": str(p.home),
-        "options_file": str(p.options_file),
-        "options_exists": p.options_file.exists(),
-        "options_size": p.options_file.stat().st_size if p.options_file.exists() else 0,
-        "settings_file": str(p.settings_file),
-        "settings_exists": p.settings_file.exists(),
-        "settings_size": p.settings_file.stat().st_size if p.settings_file.exists() else 0,
+        "web_config_dir": str(p.web_config),
+        "running_as_user": os.getenv("USER", "unknown"),
+        "running_as_uid": os.getuid(),
+        "options_file": _file_info(p.options_file),
+        "settings_file": _file_info(p.settings_file),
+        "allsky_home_options": _file_info(p.config / "options.json"),
+        "allsky_home_settings": _file_info(p.config / "settings.json"),
     }
     if p.options_file.exists():
         try:
@@ -56,7 +78,6 @@ async def debug():
                 raw = json.load(f)
             result["options_type"] = type(raw).__name__
             result["options_len"] = len(raw) if isinstance(raw, list) else "n/a"
-            result["options_first"] = raw[0] if isinstance(raw, list) and raw else None
         except Exception as e:
             result["options_error"] = str(e)
     if p.settings_file.exists():

@@ -17,6 +17,13 @@ class Settings(BaseModel):
     # tree except for our own database in DATA_DIR.
     allsky_home: Path = Path(os.environ.get("ALLSKY_HOME", str(Path.home() / "allsky")))
 
+    # Where allsky-web stores its own copies of config files that the service
+    # user can reliably read, even if ALLSKY_HOME is inside a restricted home
+    # directory.  Falls back to ALLSKY_HOME/config if not set.
+    web_config_dir: Path = Path(
+        os.environ.get("ALLSKY_WEB_CONFIG", os.environ.get("ALLSKY_HOME", str(Path.home() / "allsky")) + "/config")
+    )
+
     # Where allsky-web stores its own state (sqlite db, sessions, etc).
     data_dir: Path = Path(
         os.environ.get("ALLSKY_WEB_DATA", str(Path(__file__).resolve().parents[2] / "data"))
