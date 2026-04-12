@@ -374,6 +374,18 @@ visudo -cf /etc/sudoers.d/allsky-web >/dev/null 2>&1 || true
 systemctl daemon-reload
 systemctl enable allsky-web.service
 
+# Final permission fix — ensure allskyweb can traverse ALLSKY_HOME.
+# On Bookworm, home dirs are 700 and PAM resets them on login.
+# We set o+rx on the allsky dir and its parent (the user's home).
+PARENT_DIR="$(dirname "${ALLSKY_HOME}")"
+chmod o+rx "${PARENT_DIR}" 2>/dev/null || true
+chmod o+rx "${ALLSKY_HOME}" 2>/dev/null || true
+chmod -R o+rX "${ALLSKY_HOME}/images" 2>/dev/null || true
+chmod -R o+rX "${ALLSKY_HOME}/html" 2>/dev/null || true
+chmod -R o+rX "${ALLSKY_HOME}/config" 2>/dev/null || true
+chmod o+rx "${ALLSKY_HOME}/tmp" 2>/dev/null || true
+green "    Permissions set on ALLSKY_HOME."
+
 # Start the web UI.
 systemctl restart allsky-web.service 2>/dev/null || systemctl start allsky-web.service || true
 

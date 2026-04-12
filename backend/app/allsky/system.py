@@ -43,7 +43,10 @@ def cpu_temperature() -> float | None:
 
 def _dir_size(p: Path) -> int:
     """Total bytes used by a directory tree (non-recursive stat)."""
-    if not p.exists():
+    try:
+        if not p.exists():
+            return 0
+    except OSError:
         return 0
     try:
         total = 0
@@ -163,8 +166,14 @@ def _swap_info() -> dict[str, Any]:
 def system_snapshot() -> dict[str, Any]:
     """One-shot reading of system telemetry for the dashboard."""
     images_dir = paths().images
-    disk_target = images_dir if images_dir.exists() else Path("/")
-    du = psutil.disk_usage(str(disk_target))
+    try:
+        disk_target = images_dir if images_dir.exists() else Path("/")
+    except OSError:
+        disk_target = Path("/")
+    try:
+        du = psutil.disk_usage(str(disk_target))
+    except OSError:
+        du = psutil.disk_usage("/")
     du_root = psutil.disk_usage("/")
 
     load1, load5, load15 = psutil.getloadavg()
