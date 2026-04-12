@@ -126,17 +126,20 @@ if [[ -f "${ALLSKY_HOME}/src/capture_RPi" ]]; then
   green "    Capture binaries installed."
 fi
 
-# Copy config repo files to config/ if not already there.
+# Always copy the options schema (it defines all settings for the web UI).
+# This is safe to overwrite — it's a read-only schema, not user data.
+if [[ -f "${ALLSKY_HOME}/config_repo/options.json.repo" ]]; then
+  cp "${ALLSKY_HOME}/config_repo/options.json.repo" "${ALLSKY_HOME}/config/options.json"
+fi
+
+# Create initial settings.json if missing (first install).
 if [[ ! -f "${ALLSKY_HOME}/config/settings.json" ]]; then
-  if [[ -f "${ALLSKY_HOME}/config_repo/options.json.repo" ]]; then
-    cp "${ALLSKY_HOME}/config_repo/options.json.repo" "${ALLSKY_HOME}/config/options.json"
-  fi
-  # Create a minimal settings.json — will be configured via the web UI.
   echo '{"cameratype":"RPi","cameramodel":"","cameranumber":"0","filename":"image.jpg","debuglevel":"1"}' \
     > "${ALLSKY_HOME}/config/settings.json"
-  echo '{"status":"Not configured"}' > "${ALLSKY_HOME}/config/status.json"
-  green "    Created initial config files."
+  green "    Created initial settings."
 fi
+# Always refresh status.
+echo '{"status":"Not configured"}' > "${ALLSKY_HOME}/config/status.json"
 
 # Create allsky.service if not present.
 if [[ ! -f /etc/systemd/system/allsky.service ]]; then
