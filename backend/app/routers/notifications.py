@@ -175,11 +175,17 @@ async def calibrate_focus():
 @router.get("/focus/current")
 async def current_focus():
     """Get the current sharpness assessment."""
-    target = paths().latest_image
-    if not target.exists():
-        raise HTTPException(404, "no current frame")
+    try:
+        target = paths().latest_image
+        if not target.exists():
+            return {"score": None, "baseline": None, "threshold": None, "status": "no frame"}
+    except OSError:
+        return {"score": None, "baseline": None, "threshold": None, "status": "no frame"}
     cfg = load_focus_config()
-    result = assess_focus(
-        target, cfg.get("baseline_sharpness"), cfg.get("threshold_pct", 60)
-    )
-    return result
+    try:
+        result = assess_focus(
+            target, cfg.get("baseline_sharpness"), cfg.get("threshold_pct", 60)
+        )
+        return result
+    except OSError:
+        return {"score": None, "baseline": None, "threshold": None, "status": "permission denied"}

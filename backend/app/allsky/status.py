@@ -56,9 +56,9 @@ def read_messages(limit: int = 50) -> list[dict[str, Any]]:
 
 def read_version() -> str:
     p = paths().version_file
-    if not p.exists():
-        return "unknown"
     try:
+        if not p.exists():
+            return "unknown"
         return p.read_text().splitlines()[0].strip()
     except OSError:
         return "unknown"
@@ -67,35 +67,35 @@ def read_version() -> str:
 def read_camera_info() -> dict[str, Any]:
     """Best-effort camera detection from connected_cameras.txt + settings.json."""
     out: dict[str, Any] = {"connected": [], "active": None, "active_model": None}
-    p = paths().connected_cameras
-    if p.exists():
-        try:
+    try:
+        p = paths().connected_cameras
+        if p.exists():
             for line in p.read_text().splitlines():
                 line = line.strip()
                 if not line or line.startswith("#"):
                     continue
                 out["connected"].append(line)
-        except OSError:
-            pass
+    except OSError:
+        pass
 
-    sp = paths().settings_file
-    if sp.exists():
-        try:
+    try:
+        sp = paths().settings_file
+        if sp.exists():
             with sp.open() as f:
                 s = json.load(f)
             out["active"] = s.get("cameratype")
             out["active_model"] = s.get("cameramodel")
-        except (json.JSONDecodeError, OSError):
-            pass
+    except (json.JSONDecodeError, OSError):
+        pass
     return out
 
 
 def latest_image_meta() -> dict[str, Any] | None:
     """Cheap stat-only metadata for the live frame; full EXIF lives in routers/live.py."""
-    p = paths().latest_image
-    if not p.exists():
-        return None
     try:
+        p = paths().latest_image
+        if not p.exists():
+            return None
         st = p.stat()
         return {
             "size": st.st_size,
