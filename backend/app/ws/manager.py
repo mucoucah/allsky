@@ -18,10 +18,13 @@ log = logging.getLogger(__name__)
 QUEUE_MAX = 4  # frames; ~2 MB at typical sizes — small on purpose
 
 
-@dataclass
+@dataclass(eq=False)
 class Client:
     ws: WebSocket
     queue: asyncio.Queue[tuple[str, Any]]  # ("frame", bytes) or ("meta", dict)
+
+    def __hash__(self) -> int:
+        return id(self)
 
 
 class LiveBroadcaster:

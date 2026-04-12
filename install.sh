@@ -125,6 +125,19 @@ if [[ ! -f "${ALLSKY_HOME}/bin/capture_RPi" && -f "${ALLSKY_HOME}/src/Makefile" 
   popd >/dev/null
 fi
 
+# Replace PHP convertJSON with Python version (eliminates PHP dependency).
+if [[ -f "${ALLSKY_HOME}/scripts/convertJSON.py" ]]; then
+  chmod +x "${ALLSKY_HOME}/scripts/convertJSON.py"
+  # Create a shim so scripts calling convertJSON.php use Python instead.
+  cat > "${ALLSKY_HOME}/scripts/convertJSON.php" <<'PHPSHIM'
+#!/bin/bash
+# PHP replaced by Python — this shim forwards all arguments.
+exec "$(dirname "$0")/convertJSON.py" "$@"
+PHPSHIM
+  chmod +x "${ALLSKY_HOME}/scripts/convertJSON.php"
+  green "    Replaced convertJSON.php with Python version."
+fi
+
 # Create essential directories that Allsky expects.
 mkdir -p "${ALLSKY_HOME}"/{tmp,config,images,darks,bin,logs}
 mkdir -p "${ALLSKY_HOME}/config"/{overlay/images,modules,logs}
