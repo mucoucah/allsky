@@ -137,7 +137,66 @@ export const api = {
     created_at: number; acknowledged_at: number | null;
   }>>("/alerts"),
   ackAlert: (id: number) => request<{ ok: boolean }>(`/alerts/${id}/ack`, { method: "POST" }),
+
+  // Notification channels
+  notifChannels: () => request<{ channels: NotifChannel[] }>("/notifications/channels"),
+  createChannel: (ch: Partial<NotifChannel>) =>
+    request<NotifChannel>("/notifications/channels", { method: "POST", json: ch }),
+  updateChannel: (id: string, ch: Partial<NotifChannel>) =>
+    request<NotifChannel>(`/notifications/channels/${id}`, { method: "PUT", json: ch }),
+  deleteChannel: (id: string) =>
+    request<{ deleted: string }>(`/notifications/channels/${id}`, { method: "DELETE" }),
+  testChannel: (id: string) =>
+    request<{ ok: boolean }>(`/notifications/channels/${id}/test`, { method: "POST" }),
+  manualSend: (body: { subject: string; body: string; include_snapshot?: boolean; include_timelapse?: boolean }) =>
+    request<{ results: Record<string, boolean> }>("/notifications/send", { method: "POST", json: body }),
+
+  // Meteor detection
+  meteorConfig: () => request<MeteorConfig>("/notifications/meteor/config"),
+  setMeteorConfig: (cfg: Partial<MeteorConfig>) =>
+    request<{ ok: boolean }>("/notifications/meteor/config", { method: "PUT", json: cfg }),
+  detectMeteorNow: () => request<{
+    meteor_count: number; line_count: number; lines: number[][];
+  }>("/notifications/meteor/detect-now", { method: "POST" }),
+
+  // Focus monitoring
+  focusConfig: () => request<FocusConfig>("/notifications/focus/config"),
+  setFocusConfig: (cfg: Partial<FocusConfig>) =>
+    request<{ ok: boolean }>("/notifications/focus/config", { method: "PUT", json: cfg }),
+  calibrateFocus: () =>
+    request<{ ok: boolean; baseline_sharpness: number }>("/notifications/focus/calibrate", { method: "POST" }),
+  currentFocus: () => request<{
+    score: number | null; baseline: number | null; threshold: number | null; status: string;
+  }>("/notifications/focus/current"),
 };
+
+export interface NotifChannel {
+  id: string;
+  type: string;
+  name: string;
+  enabled: boolean;
+  config: Record<string, string>;
+  send_snapshot: boolean;
+  send_timelapse: boolean;
+}
+
+export interface MeteorConfig {
+  enabled: boolean;
+  poll_interval_minutes: number;
+  min_streak_length: number;
+  include_snapshot: boolean;
+  include_timelapse: boolean;
+  [k: string]: unknown;
+}
+
+export interface FocusConfig {
+  enabled: boolean;
+  poll_interval_minutes: number;
+  baseline_sharpness: number | null;
+  threshold_pct: number;
+  consecutive_failures_to_alert: number;
+  include_snapshot: boolean;
+}
 
 export const fileUrl = {
   imageThumb: (path: string) => `${base}/images/thumb?path=${encodeURIComponent(path)}`,

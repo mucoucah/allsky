@@ -19,7 +19,8 @@ from starlette.middleware.sessions import SessionMiddleware
 from app.allsky.watcher import watch_latest_image
 from app.config import get_settings
 from app.db import init_db
-from app.routers import alerts, auth, images, keograms, live, masks, settings, system
+from app.notify.watchers import focus_watcher, meteor_watcher
+from app.routers import alerts, auth, images, keograms, live, masks, notifications, settings, system
 from app.ws.manager import LiveBroadcaster
 
 log = logging.getLogger("allskyweb")
@@ -37,15 +38,24 @@ async def lifespan(app: FastAPI):
     app.state.watcher_task = asyncio.create_task(
         watch_latest_image(app.state.broadcaster, app.state.watcher_stop)
     )
+    # Alert watchers (meteor detection + focus monitoring).
+    app.state.meteor_task = asyncio.create_task(meteor_watcher(app.state.watcher_stop))
+    app.state.focus_task = asyncio.create_task(focus_watcher(app.state.watcher_stop))
+
     try:
         yield
     finally:
         app.state.watcher_stop.set()
-        app.state.watcher_task.cancel()
-        try:
-            await app.state.watcher_task
-        except (asyncio.CancelledError, Exception):  # noqa: BLE001
-            pass
+        for task in (
+            app.state.watcher_task,
+            app.state.meteor_task,
+            app.state.focus_task,
+        ):
+            task.cancel()
+            try:
+                await task
+            except (asyncio.CancelledError, Exception):  # noqa: BLE001
+                pass
         log.info("shutdown complete")
 
 
@@ -72,6 +82,7 @@ def create_app() -> FastAPI:
         keograms.router,
         alerts.router,
         auth.router,
+        notifications.router,
     ):
         app.include_router(r)
 
