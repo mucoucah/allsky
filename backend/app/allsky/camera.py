@@ -97,17 +97,10 @@ async def setup_initial_config(
     Called by the setup wizard when the user configures their camera
     for the first time via the web UI.
     """
-    p = paths()
-    settings_path = p.settings_file
+    from .settings import load_values, save_values
 
     # Load existing or start fresh.
-    settings: dict[str, Any] = {}
-    if settings_path.exists():
-        try:
-            with settings_path.open() as f:
-                settings = json.load(f)
-        except (json.JSONDecodeError, OSError):
-            pass
+    settings = load_values()
 
     settings.update({
         "cameratype": camera_type,
@@ -120,13 +113,18 @@ async def setup_initial_config(
         "lastchanged": "1",  # Tells allsky.sh that settings have been reviewed.
     })
 
-    settings_path.parent.mkdir(parents=True, exist_ok=True)
-    with settings_path.open("w") as f:
-        json.dump(settings, f, indent=4)
+    # Write to both web config and allsky home copies.
+    save_values(settings)
 
     # Update status to indicate configuration is done.
-    status_path = p.status_file
-    with status_path.open("w") as f:
-        json.dump({"status": "Not Running"}, f)
+    p = paths()
+    for status_path in (p.status_file, p.config / "status.json"):
+        try:
+            status_path.parent.mkdir(parents=True, exist_ok=True)
+            with status_path.open("w") as f:
+                json.dump({"status": "Not Running"}, f)
+        except OSError:
+            pass
 
-    return {"ok": True, "settings_path": str(settings_path)}
+    log.info("setup_initial_config: camera_type=%s model=%s", camera_type, camera_model)
+    return {"ok": True}

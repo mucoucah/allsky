@@ -100,19 +100,39 @@ async def enable_camera():
         results.append({"method": "raspi-config", "error": str(e)})
 
     # Method 2: Ensure camera_auto_detect=1 in config.txt (Bookworm default).
+    # We need sudo to write to /boot/config.txt.
     config_paths = ["/boot/firmware/config.txt", "/boot/config.txt"]
     for cfg_path in config_paths:
         try:
             with open(cfg_path) as f:
                 content = f.read()
             if "camera_auto_detect" not in content:
-                with open(cfg_path, "a") as f:
-                    f.write("\ncamera_auto_detect=1\n")
-                results.append({"method": "config.txt", "path": cfg_path, "added": True})
+                # Use sudo tee -a to append (service user can't write to /boot directly).
+                try:
+                    proc = await asyncio.create_subprocess_exec(
+                        "sudo", "-n", "tee", "-a", cfg_path,
+                        stdin=asyncio.subprocess.PIPE,
+                        stdout=asyncio.subprocess.DEVNULL,
+                        stderr=asyncio.subprocess.PIPE,
+                    )
+                    await asyncio.wait_for(
+                        proc.communicate(input=b"\ncamera_auto_detect=1\n"),
+                        timeout=10,
+                    )
+                    results.append({
+                        "method": "config.txt", "path": cfg_path,
+                        "added": proc.returncode == 0,
+                        "error": None if proc.returncode == 0 else "sudo write failed",
+                    })
+                except Exception as e:
+                    results.append({"method": "config.txt", "path": cfg_path, "error": str(e)})
             else:
                 results.append({"method": "config.txt", "path": cfg_path, "already_set": True})
             break
-        except (FileNotFoundError, PermissionError):
+        except FileNotFoundError:
+            continue
+        except PermissionError:
+            results.append({"method": "config.txt", "path": cfg_path, "error": "permission denied reading"})
             continue
 
     needs_reboot = any(r.get("added") for r in results)
