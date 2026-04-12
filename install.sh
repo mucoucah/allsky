@@ -1,24 +1,72 @@
 #!/bin/bash
 # allsky-web installer (Raspberry Pi OS Bookworm / Bullseye 64-bit).
 #
+# Usage:
+#   sudo ./install.sh                     # auto-detects ALLSKY_HOME
+#   sudo ./install.sh /home/pi/allsky     # explicit path
+#
 # Idempotent: safe to re-run after pulling new code. It does NOT touch the
-# upstream Allsky installation in $ALLSKY_HOME.
+# upstream Allsky installation.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-ALLSKY_HOME="${ALLSKY_HOME:-/home/${SUDO_USER:-pi}/allsky}"
-INSTALL_PREFIX="${INSTALL_PREFIX:-/opt/allsky-web}"
-DATA_DIR="${ALLSKY_WEB_DATA:-/var/lib/allsky-web}"
-SERVICE_USER="${ALLSKY_WEB_USER_NAME:-allskyweb}"
+INSTALL_PREFIX="/opt/allsky-web"
+DATA_DIR="/var/lib/allsky-web"
+SERVICE_USER="allskyweb"
 ENV_FILE="/etc/allsky-web/env"
 NODE_MIN_MAJOR=18
 
 cyan()  { printf "\033[36m%s\033[0m\n" "$*"; }
 green() { printf "\033[32m%s\033[0m\n" "$*"; }
 red()   { printf "\033[31m%s\033[0m\n" "$*"; }
+yellow(){ printf "\033[33m%s\033[0m\n" "$*"; }
 
 if [[ $EUID -ne 0 ]]; then
-  red "Please run with sudo: sudo ./install.sh"
+  red "Please run with sudo:"
+  red "  sudo ./install.sh"
+  red "  sudo ./install.sh /path/to/allsky"
+  exit 1
+fi
+
+# ── Find ALLSKY_HOME ────────────────────────────────────────────
+# Priority: 1) first CLI argument, 2) existing env file, 3) auto-detect.
+
+if [[ $# -ge 1 && -n "${1:-}" ]]; then
+  ALLSKY_HOME="$1"
+elif [[ -f "${ENV_FILE}" ]]; then
+  # Read from existing env file if we're re-running.
+  ALLSKY_HOME="$(grep -m1 '^ALLSKY_HOME=' "${ENV_FILE}" | cut -d= -f2- || true)"
+fi
+
+if [[ -z "${ALLSKY_HOME:-}" ]]; then
+  # Auto-detect: search common locations.
+  REAL_USER="${SUDO_USER:-pi}"
+  SEARCH_PATHS=(
+    "/home/${REAL_USER}/allsky"
+    "/home/pi/allsky"
+    "/home/allsky/allsky"
+    "/opt/allsky"
+  )
+  # Also try every user home.
+  for d in /home/*/allsky; do
+    [[ -d "$d" ]] && SEARCH_PATHS+=("$d")
+  done
+  for p in "${SEARCH_PATHS[@]}"; do
+    if [[ -f "${p}/variables.sh" ]]; then
+      ALLSKY_HOME="$p"
+      break
+    fi
+  done
+fi
+
+if [[ -z "${ALLSKY_HOME:-}" ]]; then
+  red "Could not find an Allsky installation. Searched:"
+  for p in "${SEARCH_PATHS[@]}"; do
+    red "  $p"
+  done
+  echo ""
+  red "Please pass the path explicitly:"
+  red "  sudo ./install.sh /path/to/allsky"
   exit 1
 fi
 
@@ -26,15 +74,16 @@ fi
 
 cyan "==> Checking upstream Allsky at ${ALLSKY_HOME}"
 if [[ ! -d "${ALLSKY_HOME}" ]]; then
-  red "Upstream Allsky not found at ${ALLSKY_HOME}."
-  red "Install it first (https://github.com/AllskyTeam/allsky) or set ALLSKY_HOME."
+  red "Directory not found: ${ALLSKY_HOME}"
+  red "Pass the correct path: sudo ./install.sh /path/to/allsky"
   exit 1
 fi
 if [[ ! -f "${ALLSKY_HOME}/variables.sh" ]]; then
   red "${ALLSKY_HOME} does not look like an Allsky installation (no variables.sh)."
   exit 1
 fi
-green "    Found $(head -1 "${ALLSKY_HOME}/version" 2>/dev/null || echo 'unknown version')."
+ALLSKY_VER="$(head -1 "${ALLSKY_HOME}/version" 2>/dev/null || echo 'unknown')"
+green "    Found Allsky ${ALLSKY_VER} at ${ALLSKY_HOME}"
 
 # ── Create service user ──────────────────────────────────────────
 
@@ -45,6 +94,7 @@ if ! id -u "${SERVICE_USER}" &>/dev/null; then
 else
   green "    Already exists."
 fi
+# Grant read access to Allsky's files (images, config, tmp).
 ALLSKY_GROUP="$(stat -c '%G' "${ALLSKY_HOME}")"
 usermod -a -G "${ALLSKY_GROUP}" "${SERVICE_USER}" 2>/dev/null || true
 
@@ -52,33 +102,36 @@ usermod -a -G "${ALLSKY_GROUP}" "${SERVICE_USER}" 2>/dev/null || true
 
 cyan "==> Installing OS packages"
 apt-get update -qq
-# OpenCV build deps (for opencv-python-headless wheel on ARM if no prebuilt):
-apt-get install -y -q python3-venv python3-dev python3-pip \
-  libopenjp2-7 libtiff6 libatlas-base-dev libhdf5-dev \
-  2>/dev/null || true
 
-# Node.js — need >= 18. Check if available, install via NodeSource if not.
+# Core packages. rsync might not be pre-installed on Lite images.
+apt-get install -y -qq python3-venv python3-dev python3-pip rsync curl || true
+
+# OpenCV native deps (for ARM wheels or source build):
+apt-get install -y -qq \
+  libopenjp2-7 libatlas-base-dev libhdf5-dev \
+  2>/dev/null || true
+# libtiff name varies: libtiff6 (Bookworm) vs libtiff5 (Bullseye).
+apt-get install -y -qq libtiff6 2>/dev/null || \
+  apt-get install -y -qq libtiff5 2>/dev/null || true
+
+# Node.js — need >= 18.
 if command -v node &>/dev/null; then
   NODE_VER="$(node -v | sed 's/^v//' | cut -d. -f1)"
-  if [[ "${NODE_VER}" -lt ${NODE_MIN_MAJOR} ]]; then
-    red "    Node.js v${NODE_VER} is too old (need >= ${NODE_MIN_MAJOR}). Installing newer version."
-    _install_node=true
-  else
-    green "    Node.js v$(node -v) OK."
+  if [[ "${NODE_VER}" -ge ${NODE_MIN_MAJOR} ]]; then
+    green "    Node.js $(node -v) OK."
     _install_node=false
+  else
+    yellow "    Node.js v${NODE_VER} is too old (need >= ${NODE_MIN_MAJOR})."
+    _install_node=true
   fi
 else
+  yellow "    Node.js not found."
   _install_node=true
 fi
 if [[ "${_install_node}" == "true" ]]; then
   cyan "    Installing Node.js ${NODE_MIN_MAJOR} via NodeSource..."
-  if command -v curl &>/dev/null; then
-    curl -fsSL "https://deb.nodesource.com/setup_${NODE_MIN_MAJOR}.x" | bash -
-  else
-    apt-get install -y -q curl
-    curl -fsSL "https://deb.nodesource.com/setup_${NODE_MIN_MAJOR}.x" | bash -
-  fi
-  apt-get install -y -q nodejs
+  curl -fsSL "https://deb.nodesource.com/setup_${NODE_MIN_MAJOR}.x" | bash - 2>/dev/null
+  apt-get install -y -qq nodejs
   green "    Installed Node.js $(node -v)."
 fi
 
@@ -89,11 +142,12 @@ mkdir -p "${INSTALL_PREFIX}"
 rsync -a --delete \
   --exclude __pycache__ --exclude '*.pyc' \
   --exclude node_modules --exclude .venv --exclude dist \
+  --exclude .git \
   "${SCRIPT_DIR}/backend/"  "${INSTALL_PREFIX}/backend/"
 rsync -a --delete \
   --exclude node_modules --exclude dist \
+  --exclude .git \
   "${SCRIPT_DIR}/frontend/" "${INSTALL_PREFIX}/frontend/"
-# Copy deploy artefacts.
 rsync -a "${SCRIPT_DIR}/deploy/" "${INSTALL_PREFIX}/deploy/"
 green "    Done."
 
@@ -104,25 +158,34 @@ VENV="${INSTALL_PREFIX}/backend/.venv"
 if [[ ! -d "${VENV}" ]]; then
   python3 -m venv "${VENV}"
 fi
-"${VENV}/bin/pip" install --quiet --upgrade pip wheel setuptools
-"${VENV}/bin/pip" install --quiet -e "${INSTALL_PREFIX}/backend"
+"${VENV}/bin/pip" install --quiet --upgrade pip wheel setuptools 2>&1 | tail -1 || true
+cyan "    Installing Python packages (this may take several minutes on first run)..."
+"${VENV}/bin/pip" install --quiet "${INSTALL_PREFIX}/backend" 2>&1 | tail -3 || {
+  red "    pip install failed. Retrying with verbose output..."
+  "${VENV}/bin/pip" install "${INSTALL_PREFIX}/backend"
+}
 green "    Python deps installed."
 
 # ── Frontend build ───────────────────────────────────────────────
 
 cyan "==> Building React frontend"
 pushd "${INSTALL_PREFIX}/frontend" >/dev/null
-npm ci --prefer-offline 2>/dev/null || npm install
-npm run build
+# npm ci needs a lockfile; fall back to npm install which generates one.
+npm install --prefer-offline 2>&1 | tail -3 || npm install
+npm run build 2>&1 | tail -5
 popd >/dev/null
+if [[ ! -f "${INSTALL_PREFIX}/frontend/dist/index.html" ]]; then
+  red "    Frontend build failed — dist/index.html not found."
+  red "    Check npm / vite errors above."
+  exit 1
+fi
 green "    Frontend built to ${INSTALL_PREFIX}/frontend/dist"
 
 # ── Data directory ───────────────────────────────────────────────
 
-cyan "==> Creating data directory ${DATA_DIR}"
+cyan "==> Setting ownership"
 mkdir -p "${DATA_DIR}"
 chown -R "${SERVICE_USER}:${SERVICE_USER}" "${DATA_DIR}"
-# The backend writes to DATA_DIR; the frontend dist is read-only.
 chown -R "${SERVICE_USER}:${SERVICE_USER}" "${INSTALL_PREFIX}"
 
 # ── Environment file ─────────────────────────────────────────────
@@ -135,11 +198,8 @@ if [[ ! -f "${ENV_FILE}" ]]; then
 ALLSKY_HOME=${ALLSKY_HOME}
 ALLSKY_WEB_DATA=${DATA_DIR}
 ALLSKY_WEB_SECRET=${SECRET}
-# Listen on all interfaces so you can reach the UI from another device.
 ALLSKY_WEB_HOST=0.0.0.0
 ALLSKY_WEB_PORT=8000
-# Set these to require login (empty = no auth, LAN-trusted mode).
-# Generate a hash:  python3 -c "from passlib.hash import bcrypt; print(bcrypt.hash('YOUR-PASS'))"
 ALLSKY_WEB_USER=
 ALLSKY_WEB_PASS_HASH=
 ENVEOF
@@ -171,8 +231,8 @@ User=${SERVICE_USER}
 Group=${SERVICE_USER}
 EnvironmentFile=-${ENV_FILE}
 WorkingDirectory=${INSTALL_PREFIX}/backend
-ExecStart=${INSTALL_PREFIX}/backend/.venv/bin/uvicorn app.main:app \\
-    --host \${ALLSKY_WEB_HOST} --port \${ALLSKY_WEB_PORT} --proxy-headers \\
+ExecStart=${INSTALL_PREFIX}/backend/.venv/bin/uvicorn app.main:app \
+    --host \${ALLSKY_WEB_HOST} --port \${ALLSKY_WEB_PORT} --proxy-headers \
     --forwarded-allow-ips='*'
 Restart=on-failure
 RestartSec=3
@@ -194,30 +254,51 @@ green "    Enabled allsky-web.service."
 
 cyan "==> Installing sudoers drop-in"
 cat >/etc/sudoers.d/allsky-web <<SUDOEOF
-# allsky-web: allow service control only
 ${SERVICE_USER} ALL=(root) NOPASSWD: /usr/bin/systemctl start allsky.service
 ${SERVICE_USER} ALL=(root) NOPASSWD: /usr/bin/systemctl stop allsky.service
 ${SERVICE_USER} ALL=(root) NOPASSWD: /usr/bin/systemctl restart allsky.service
 SUDOEOF
 chmod 0440 /etc/sudoers.d/allsky-web
-visudo -cf /etc/sudoers.d/allsky-web
-green "    Installed."
+if ! visudo -cf /etc/sudoers.d/allsky-web >/dev/null 2>&1; then
+  red "    Warning: sudoers syntax check failed. Service control may not work."
+else
+  green "    Installed."
+fi
+
+# ── Start the service ────────────────────────────────────────────
+
+cyan "==> Starting allsky-web"
+systemctl start allsky-web.service || {
+  red "    Failed to start. Check: sudo journalctl -u allsky-web -n 30"
+}
 
 # ── Done ─────────────────────────────────────────────────────────
 
+# Wait a moment for uvicorn to bind.
+sleep 2
+IP="$(hostname -I 2>/dev/null | awk '{print $1}')"
+PORT="$(grep -m1 '^ALLSKY_WEB_PORT=' "${ENV_FILE}" 2>/dev/null | cut -d= -f2 || echo 8000)"
+
 echo ""
 green "================================================================="
-green "  allsky-web installed successfully!"
+green "  allsky-web installed and started!"
 green "================================================================="
 echo ""
-cyan  "  Start the service:"
-echo  "    sudo systemctl start allsky-web"
+if systemctl is-active --quiet allsky-web.service; then
+  green "  Service is running."
+  echo ""
+  cyan  "  Open in your browser:"
+  echo  "    http://${IP:-<pi-ip>}:${PORT}"
+else
+  yellow "  Service may not have started. Check logs:"
+  echo   "    sudo journalctl -u allsky-web -n 50"
+fi
 echo ""
-cyan  "  Then open in your browser:"
-echo  "    http://$(hostname -I 2>/dev/null | awk '{print $1}'):8000"
+cyan  "  Useful commands:"
+echo  "    sudo systemctl status allsky-web"
+echo  "    sudo systemctl restart allsky-web"
+echo  "    sudo journalctl -u allsky-web -f"
 echo ""
-cyan  "  The UI serves directly from FastAPI — no lighttpd config needed."
-cyan  "  (Optional: use deploy/lighttpd-allskyweb.conf for a reverse proxy.)"
-echo ""
-cyan  "  To enable authentication, edit ${ENV_FILE}"
+cyan  "  Config: ${ENV_FILE}"
+cyan  "  Allsky: ${ALLSKY_HOME}"
 echo ""

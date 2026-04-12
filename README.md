@@ -41,22 +41,27 @@ A modern, mobile-first web interface for the [Allsky](https://github.com/AllskyT
 git clone https://github.com/mucoucah/allsky.git allsky-web
 cd allsky-web
 
-# Run the installer (installs to /opt/allsky-web)
+# Run the installer — it auto-detects your Allsky location.
+# If auto-detect fails, pass the path explicitly:
 sudo ./install.sh
-
-# Start the service
-sudo systemctl start allsky-web
-
-# Open in browser
-# http://<pi-ip>:8000
+# or:
+sudo ./install.sh /home/pi/allsky
 ```
 
+The installer auto-detects your Allsky installation by searching
+`/home/*/allsky` for `variables.sh`. If it can't find it, pass
+the path as the first argument.
+
 The installer will:
-1. Create an `allskyweb` service user
-2. Install Python/Node dependencies
-3. Build the React frontend
-4. Create a systemd service
-5. Generate a session secret
+1. Find and verify your upstream Allsky installation
+2. Create an `allskyweb` service user
+3. Install Python/Node dependencies (including OpenCV)
+4. Build the React frontend
+5. Create and start a systemd service
+6. Generate a session secret
+
+First install takes **5-15 minutes** on a Pi 3B (OpenCV wheel build).
+Re-runs are much faster.
 
 ### Environment variables
 
