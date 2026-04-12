@@ -10,6 +10,8 @@ from typing import Any
 
 from fastapi import APIRouter, Body, HTTPException
 
+import httpx
+
 from app.allsky.camera import (
     CAMERA_OVERLAYS, detect_cameras, get_camera_overlay_status,
     install_camera_overlay, setup_initial_config,
@@ -95,6 +97,55 @@ async def install_overlay(body: dict[str, Any] = Body(...)):
     if not result.get("ok"):
         raise HTTPException(400, result.get("error", "failed"))
     return result
+
+
+@router.get("/geocode")
+async def geocode(q: str):
+    """Look up latitude/longitude from a zip code, city name, or address.
+
+    Uses the free Nominatim (OpenStreetMap) geocoding API.
+    """
+    if not q or len(q.strip()) < 2:
+        raise HTTPException(400, "query too short")
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            # Try zip code format first (US zip codes).
+            params = {
+                "q": q.strip(),
+                "format": "json",
+                "limit": "1",
+                "addressdetails": "1",
+            }
+            # If it looks like a US zip code, add country hint.
+            if q.strip().isdigit() and len(q.strip()) == 5:
+                params["countrycodes"] = "us"
+                params["postalcode"] = q.strip()
+                del params["q"]
+
+            r = await client.get(
+                "https://nominatim.openstreetmap.org/search",
+                params=params,
+                headers={"User-Agent": "allsky-web/1.0"},
+            )
+            results = r.json()
+            if not results:
+                return {"found": False, "query": q}
+
+            loc = results[0]
+            addr = loc.get("address", {})
+            display = loc.get("display_name", "")
+            return {
+                "found": True,
+                "latitude": loc["lat"],
+                "longitude": loc["lon"],
+                "display_name": display,
+                "city": addr.get("city") or addr.get("town") or addr.get("village", ""),
+                "state": addr.get("state", ""),
+                "country": addr.get("country", ""),
+            }
+    except Exception as e:
+        raise HTTPException(500, f"Geocoding failed: {e}")
 
 
 @router.post("/enable-camera")
