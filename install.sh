@@ -34,10 +34,22 @@ if [[ $EUID -ne 0 ]]; then
   exit 1
 fi
 
+# Read version from the Python package (single source of truth).
+VERSION="$(grep -m1 '__version__' "${SCRIPT_DIR}/backend/app/__init__.py" | sed 's/.*"\(.*\)".*/\1/')"
+
 echo ""
-cyan  "================================================================="
-cyan  "  allsky-web installer (full fork)"
-cyan  "  Allsky camera backend + modern web interface"
+echo ""
+cyan  "    ___    ____  __   _____ __ __ __  __"
+cyan  "   /   |  / / / / /  / ___// //_/\\ \\/ /"
+cyan  "  / /| | / / / / /   \\__ \\/ ,<    \\  / "
+cyan  "/ ___ |/ / / / /___  ___/ / /| |   / /  "
+cyan  "/_/  |_/_/_/ /_____/ /____/_/ |_|  /_/   "
+echo ""
+green "  v${VERSION}"
+echo ""
+cyan  "  Modern web interface for Allsky sky cameras"
+cyan  "  Camera backend + FastAPI + React"
+echo ""
 cyan  "================================================================="
 echo ""
 
@@ -338,11 +350,11 @@ PORT="$(grep -m1 '^ALLSKY_WEB_PORT=' "${ENV_FILE}" 2>/dev/null | cut -d= -f2 || 
 
 echo ""
 green "================================================================="
-green "  Installation complete!"
+green "  Installation complete!  Allsky Web v${VERSION}"
 green "================================================================="
 echo ""
 if systemctl is-active --quiet allsky-web.service; then
-  green "  Web UI is running."
+  green "  Web UI is running  (v${VERSION})"
   cyan  "  Open: http://${IP:-<pi-ip>}:${PORT}"
 else
   yellow "  Web UI may still be starting..."
