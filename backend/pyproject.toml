@@ -1,0 +1,24 @@
+[project]
+name = "allsky-web"
+version = "0.1.0"
+description = "Modern FastAPI/React web interface for the Allsky sky camera project"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "pydantic>=2.7",
+    "aiosqlite>=0.20",
+    "pillow>=10.3",
+    "watchfiles>=0.22",
+    "psutil>=5.9",
+    "python-multipart>=0.0.9",
+    "itsdangerous>=2.2",
+    "passlib[bcrypt]>=1.7",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "httpx>=0.27", "ruff>=0.5"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
