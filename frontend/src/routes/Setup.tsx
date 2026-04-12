@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { Camera, MapPin, Check, RefreshCw, Play, Wifi, Settings, Search } from "lucide-react";
@@ -31,6 +31,12 @@ export default function Setup() {
   const [lat, setLat] = useState("");
   const [lon, setLon] = useState("");
   const [step, setStep] = useState<"detect" | "configure" | "done">("detect");
+
+  // Pre-fill lat/lon from existing settings when status loads.
+  useEffect(() => {
+    if (status?.latitude && !lat) setLat(status.latitude);
+    if (status?.longitude && !lon) setLon(status.longitude);
+  }, [status]);
 
   const enableCamera = useMutation({ mutationFn: api.enableCamera });
   const reboot = useMutation({ mutationFn: api.reboot });
