@@ -56,6 +56,13 @@ SCHEMA = [
         new_value TEXT
     )
     """,
+    """
+    CREATE TABLE IF NOT EXISTS alert_dedup (
+        kind TEXT NOT NULL,
+        day TEXT NOT NULL,
+        PRIMARY KEY (kind, day)
+    )
+    """,
 ]
 
 

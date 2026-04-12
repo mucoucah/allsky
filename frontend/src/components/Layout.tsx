@@ -1,17 +1,18 @@
 import { NavLink, Outlet } from "react-router-dom";
 import {
   LayoutDashboard, Image as ImageIcon, Settings as SettingsIcon,
-  Eraser, BarChart3, Bell, Cpu,
+  Eraser, BarChart3, Bell, Cpu, Radar,
 } from "lucide-react";
 
 const links = [
-  { to: "/",          label: "Dashboard", Icon: LayoutDashboard },
-  { to: "/gallery",   label: "Gallery",   Icon: ImageIcon },
-  { to: "/settings",  label: "Settings",  Icon: SettingsIcon },
-  { to: "/mask",      label: "Mask",      Icon: Eraser },
-  { to: "/keograms",  label: "Keograms",  Icon: BarChart3 },
-  { to: "/alerts",    label: "Alerts",    Icon: Bell },
-  { to: "/system",    label: "System",    Icon: Cpu },
+  { to: "/",               label: "Dashboard",     Icon: LayoutDashboard },
+  { to: "/gallery",        label: "Gallery",        Icon: ImageIcon },
+  { to: "/settings",       label: "Settings",       Icon: SettingsIcon },
+  { to: "/mask",           label: "Mask",           Icon: Eraser },
+  { to: "/keograms",       label: "Keograms",       Icon: BarChart3 },
+  { to: "/alerts",         label: "Alerts",         Icon: Bell },
+  { to: "/notifications",  label: "Notifications",  Icon: Radar },
+  { to: "/system",         label: "System",         Icon: Cpu },
 ];
 
 export default function Layout() {
