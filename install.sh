@@ -61,7 +61,7 @@ apt-get update -qq
 # Base tools.
 apt-get install -y -qq \
   python3-venv python3-dev python3-pip \
-  curl rsync jq bc \
+  curl rsync jq bc gawk \
   2>/dev/null || true
 
 # Allsky's own dependencies (no lighttpd/PHP — our FastAPI replaces the legacy web UI).
@@ -396,7 +396,13 @@ chmod o+rx "${ALLSKY_HOME}" 2>/dev/null || true
 chmod -R o+rX "${ALLSKY_HOME}/images" 2>/dev/null || true
 chmod -R o+rX "${ALLSKY_HOME}/html" 2>/dev/null || true
 chmod -R o+rX "${ALLSKY_HOME}/config" 2>/dev/null || true
-chmod o+rx "${ALLSKY_HOME}/tmp" 2>/dev/null || true
+chmod o+rwx "${ALLSKY_HOME}/tmp" 2>/dev/null || true
+# The web user needs WRITE access to settings.json so settings changes
+# propagate to the camera daemon. Also status.json for status updates.
+chmod o+rw "${ALLSKY_HOME}/config/settings.json" 2>/dev/null || true
+chmod o+rw "${ALLSKY_HOME}/config/status.json" 2>/dev/null || true
+# Ensure scripts dir is accessible (allsky.sh sources from there).
+chmod -R o+rX "${ALLSKY_HOME}/scripts" 2>/dev/null || true
 green "    Permissions set on ALLSKY_HOME."
 
 # Start the web UI.

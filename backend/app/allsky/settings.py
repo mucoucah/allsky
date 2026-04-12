@@ -143,7 +143,9 @@ def save_values(values: dict[str, Any]) -> None:
     The allsky home copy (~/allsky/config/) is what the camera daemon reads.
     Both must stay in sync.
     """
+    import logging
     import os
+    log = logging.getLogger(__name__)
     p = paths()
     for target in (p.settings_file, p.settings_file_allsky_home):
         try:
@@ -152,10 +154,9 @@ def save_values(values: dict[str, Any]) -> None:
             with tmp.open("w") as f:
                 json.dump(values, f, indent=4)
             os.replace(str(tmp), str(target))
-        except OSError:
-            # May fail on the allsky home copy due to permissions — that's OK,
-            # the web config copy is the primary.
-            pass
+            log.info("settings saved to %s", target)
+        except OSError as e:
+            log.warning("failed to save settings to %s: %s", target, e)
 
 
 def grouped_schema() -> dict[str, dict[str, list[dict]]]:
