@@ -243,6 +243,7 @@ export default function Settings() {
                       setDraft((cur) => ({ ...cur, [def.name]: next }))
                     }
                   />
+                ))}
               </div>
             </section>
           );
