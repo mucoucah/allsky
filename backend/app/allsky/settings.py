@@ -27,7 +27,11 @@ class SettingDef:
     depends_on: str | None = None
     advanced: bool = False
     usage: str | None = None
-    options: list[dict] | None = None
+    # `options` may be a list of {value,label} dicts OR a list of camera-driver
+    # placeholder strings like ["bin_values"] which the upstream PHP layer
+    # resolves at install time. We pass them through unchanged.
+    options: list | None = None
+    action: str | None = None
     raw: dict | None = None
 
 
@@ -89,7 +93,8 @@ def load_schema() -> list[SettingDef]:
                 depends_on=entry.get("booldependson"),
                 advanced=bool(entry.get("advanced", False)),
                 usage=entry.get("usage"),
-                options=entry.get("values"),
+                options=entry.get("options"),
+                action=entry.get("action"),
                 raw=entry,
             )
         )
@@ -128,6 +133,7 @@ def grouped_schema() -> dict[str, dict[str, list[dict]]]:
                 "advanced": d.advanced,
                 "usage": d.usage,
                 "options": d.options,
+                "action": d.action,
             }
         )
     return out

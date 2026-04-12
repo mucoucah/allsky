@@ -7,7 +7,7 @@ from fastapi import APIRouter, Body, HTTPException, Request
 
 from app.allsky.service import ServiceError, apply_settings
 from app.allsky.settings import grouped_schema, load_values, validate_patch
-from app.db import log_setting_change
+from app.db import connect, log_setting_change
 
 router = APIRouter(prefix="/api/settings", tags=["settings"])
 
@@ -20,6 +20,15 @@ async def schema():
 @router.get("")
 async def values():
     return load_values()
+
+
+@router.get("/audit")
+async def audit(limit: int = 50):
+    async with connect() as conn:
+        cur = await conn.execute(
+            "SELECT * FROM settings_audit ORDER BY ts DESC LIMIT ?", (limit,)
+        )
+        return [dict(r) for r in await cur.fetchall()]
 
 
 @router.patch("")
