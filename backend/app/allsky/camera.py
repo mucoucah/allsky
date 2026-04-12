@@ -23,6 +23,7 @@ async def detect_cameras() -> list[dict[str, Any]]:
       [{"index": 0, "model": "imx462", "modes": ["1920x1080"], "raw": "..."}]
     """
     cameras: list[dict[str, Any]] = []
+    errors: list[str] = []
 
     # Try rpicam-hello first (Bookworm), fall back to libcamera-hello (Bullseye).
     for cmd in ["rpicam-hello", "libcamera-hello"]:
@@ -32,16 +33,61 @@ async def detect_cameras() -> list[dict[str, Any]]:
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
-            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=10)
+            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=15)
             output = (stdout or b"").decode(errors="replace") + (stderr or b"").decode(errors="replace")
+            log.info("camera detect (%s): rc=%s output=%s", cmd, proc.returncode, output[:500])
+
             if proc.returncode == 0 or "Available cameras" in output:
                 cameras = _parse_camera_list(output)
-                break
-        except (FileNotFoundError, asyncio.TimeoutError):
+                if cameras:
+                    break
+                # Command succeeded but no cameras listed.
+                if "No cameras available" in output or "No cameras" in output:
+                    errors.append(f"{cmd}: no cameras found")
+                    break
+                # Might have cameras but parsing failed — try next command.
+                errors.append(f"{cmd}: ran OK but no cameras parsed from output")
+            else:
+                errors.append(f"{cmd}: exit code {proc.returncode}")
+                if "permission" in output.lower():
+                    errors.append("Permission denied — the service user may need 'video' group access")
+        except FileNotFoundError:
             continue
-        except Exception:
+        except asyncio.TimeoutError:
+            errors.append(f"{cmd}: timed out after 15s")
+        except Exception as e:
             log.exception("camera detection via %s failed", cmd)
-            continue
+            errors.append(f"{cmd}: {e}")
+
+    # Also try v4l2 as fallback for USB cameras.
+    if not cameras:
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                "v4l2-ctl", "--list-devices",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=10)
+            output = (stdout or b"").decode(errors="replace")
+            if output.strip():
+                log.info("v4l2 devices: %s", output[:500])
+                # Parse basic v4l2 output for ZWO/USB cameras.
+                for line in output.splitlines():
+                    line = line.strip()
+                    if line and not line.startswith("/dev/"):
+                        # Device name line (e.g. "ZWO ASI462MC (usb-...):")
+                        cameras.append({
+                            "index": len(cameras),
+                            "model": line.rstrip(":").strip(),
+                            "info": "USB camera (v4l2)",
+                            "modes": [],
+                            "raw": line,
+                        })
+        except (FileNotFoundError, asyncio.TimeoutError):
+            pass
+
+    if errors and not cameras:
+        log.warning("camera detection failed: %s", "; ".join(errors))
 
     return cameras
 

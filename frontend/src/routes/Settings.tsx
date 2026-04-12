@@ -83,8 +83,10 @@ export default function Settings() {
         await api.serviceControl("restart");
       }
     },
-    onSuccess: (_, opts) => {
-      qc.invalidateQueries({ queryKey: ["values"] });
+    onSuccess: async (_, opts) => {
+      // Refetch server values and reset draft to match, clearing dirty state.
+      const fresh = await qc.fetchQuery({ queryKey: ["values"], queryFn: api.settingsValues });
+      if (fresh) setDraft({ ...fresh });
       qc.invalidateQueries({ queryKey: ["audit"] });
       qc.invalidateQueries({ queryKey: ["system"] });
       if (opts?.restart) {
