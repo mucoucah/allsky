@@ -232,10 +232,11 @@ if ! id -u "${SERVICE_USER}" &>/dev/null; then
 else
   green "    ${SERVICE_USER} already exists."
 fi
-# Add to user's group + video group (needed for camera access).
+# Add to user's group + video group (camera access) + systemd-journal (log reading).
 usermod -a -G "${REAL_GROUP}" "${SERVICE_USER}" 2>/dev/null || true
 usermod -a -G video "${SERVICE_USER}" 2>/dev/null || true
-green "    ${SERVICE_USER} added to groups: ${REAL_GROUP}, video."
+usermod -a -G systemd-journal "${SERVICE_USER}" 2>/dev/null || true
+green "    ${SERVICE_USER} added to groups: ${REAL_GROUP}, video, systemd-journal."
 
 # ── Step 4: Python backend ──────────────────────────────────────
 
