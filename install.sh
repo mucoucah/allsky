@@ -68,6 +68,7 @@ apt-get install -y -qq \
 apt-get install -y -qq \
   libatlas-base-dev libhdf5-dev libopenjp2-7 \
   imagemagick libcamera-apps python3-libcamera \
+  uhubctl \
   2>/dev/null || true
 
 # libtiff varies by Debian version.
@@ -156,6 +157,28 @@ fi
 if [[ -f "${ALLSKY_HOME}/config_repo/options.json.repo" ]]; then
   cp "${ALLSKY_HOME}/config_repo/options.json.repo" "${ALLSKY_HOME}/config/options.json"
 fi
+
+# Copy ALL .repo template files that allsky.sh needs at runtime.
+for repo_file in RPi_cameraInfo.txt env.json autoexposure.json; do
+  if [[ -f "${ALLSKY_HOME}/config_repo/${repo_file}.repo" ]]; then
+    cp "${ALLSKY_HOME}/config_repo/${repo_file}.repo" "${ALLSKY_HOME}/config/${repo_file}"
+  fi
+done
+# Copy ZWO camera info if present.
+if [[ -f "${ALLSKY_HOME}/config_repo/ZWO_cameraInfo.txt.repo" ]]; then
+  cp "${ALLSKY_HOME}/config_repo/ZWO_cameraInfo.txt.repo" "${ALLSKY_HOME}/config/ZWO_cameraInfo.txt"
+fi
+
+# Set up log rotation for allsky.
+if [[ -f "${ALLSKY_HOME}/config_repo/allsky.logrotate.repo" ]]; then
+  cp "${ALLSKY_HOME}/config_repo/allsky.logrotate.repo" /etc/logrotate.d/allsky 2>/dev/null || true
+fi
+if [[ -f "${ALLSKY_HOME}/config_repo/allsky.rsyslog.repo" ]]; then
+  cp "${ALLSKY_HOME}/config_repo/allsky.rsyslog.repo" /etc/rsyslog.d/allsky.conf 2>/dev/null || true
+  systemctl restart rsyslog 2>/dev/null || true
+fi
+
+green "    Config templates installed."
 
 # Create initial settings.json if missing (first install).
 if [[ ! -f "${ALLSKY_HOME}/config/settings.json" ]]; then
