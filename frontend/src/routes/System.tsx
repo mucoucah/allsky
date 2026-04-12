@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import {
-  Cpu, Thermometer, HardDrive, MemoryStick, Wifi, Power, RefreshCw,
+  Wifi, Power, RefreshCw,
   Activity, Server, Clock, AlertTriangle, Zap, Camera, FolderOpen,
   PowerOff, RotateCcw, ChevronDown, ChevronUp,
 } from "lucide-react";
