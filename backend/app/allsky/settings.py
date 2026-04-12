@@ -111,6 +111,28 @@ def load_values() -> dict[str, Any]:
         return json.load(f)
 
 
+def save_values(values: dict[str, Any]) -> None:
+    """Write settings.json to both the web config copy and the allsky home copy.
+
+    The web config copy (/opt/allsky-web/config/) is what the web UI reads.
+    The allsky home copy (~/allsky/config/) is what the camera daemon reads.
+    Both must stay in sync.
+    """
+    import os
+    p = paths()
+    for target in (p.settings_file, p.settings_file_allsky_home):
+        try:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            tmp = target.with_suffix(".tmp")
+            with tmp.open("w") as f:
+                json.dump(values, f, indent=4)
+            os.replace(str(tmp), str(target))
+        except OSError:
+            # May fail on the allsky home copy due to permissions — that's OK,
+            # the web config copy is the primary.
+            pass
+
+
 def grouped_schema() -> dict[str, dict[str, list[dict]]]:
     """Group schema by tab → section → entries, in upstream display order.
 

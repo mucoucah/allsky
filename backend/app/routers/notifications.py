@@ -35,13 +35,16 @@ async def list_channels():
 @router.post("/channels")
 async def create_channel(body: dict = Body(...)):
     body.setdefault("id", str(uuid.uuid4())[:8])
-    return upsert_channel(body)
+    upsert_channel(body)
+    # Return redacted version — never echo raw credentials back.
+    return {"ok": True, "channels": redacted_channels()}
 
 
 @router.put("/channels/{channel_id}")
 async def update_channel(channel_id: str, body: dict = Body(...)):
     body["id"] = channel_id
-    return upsert_channel(body)
+    upsert_channel(body)
+    return {"ok": True, "channels": redacted_channels()}
 
 
 @router.delete("/channels/{channel_id}")

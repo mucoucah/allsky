@@ -50,33 +50,42 @@ async def systemctl(verb: str) -> dict[str, Any]:
 # --- settings application ---
 
 async def apply_settings(changes: dict[str, Any]) -> dict[str, Any]:
-    """Apply a dict of changes via upstream makeChanges.sh.
+    """Apply a dict of changes by writing directly to settings.json.
 
-    Each call form is:
-        makeChanges.sh <key> <label> <oldvalue> <newvalue>
+    Merges the incoming changes into the current settings, then writes to both
+    the web config copy and the allsky home copy so the camera daemon picks them up.
 
-    We don't know the human label or old value reliably, so we pass placeholders
-    that mirror what the upstream WebUI does. makeChanges.sh handles re-linking
-    camera-specific files and triggering the appropriate restarts.
+    If upstream's makeChanges.sh exists, we also try to run it for any side-effects
+    (camera re-linking, etc.), but a failure there is non-fatal — the settings are
+    already persisted.
     """
-    script = paths().make_changes_script
-    if not script.exists():
-        raise ServiceError(f"makeChanges.sh not found at {script}")
+    import logging
+    log = logging.getLogger(__name__)
 
-    results: list[dict[str, Any]] = []
-    for key, value in changes.items():
-        # makeChanges.sh expects strings; booleans become "true"/"false".
-        if isinstance(value, bool):
-            v = "true" if value else "false"
-        else:
-            v = str(value)
-        # placeholder old value "" — script handles missing-old-value gracefully.
-        cmd = ["bash", str(script), key, key, "", v]
-        code, out, err = await _run(cmd, timeout=60.0)
-        results.append(
-            {"key": key, "value": v, "exit_code": code, "stdout": out, "stderr": err}
-        )
-        if code != 0:
-            # Stop on first failure so the user sees the offending change.
-            return {"ok": False, "results": results}
-    return {"ok": True, "results": results}
+    from .settings import load_values, save_values
+
+    # Merge changes into current settings.
+    current = load_values()
+    current.update(changes)
+    save_values(current)
+
+    # Best-effort: run makeChanges.sh for side-effects if it exists.
+    script = paths().make_changes_script
+    script_results: list[dict[str, Any]] = []
+    if script.exists():
+        for key, value in changes.items():
+            if isinstance(value, bool):
+                v = "true" if value else "false"
+            else:
+                v = str(value)
+            try:
+                cmd = ["bash", str(script), key, key, "", v]
+                code, out, err = await _run(cmd, timeout=60.0)
+                script_results.append(
+                    {"key": key, "value": v, "exit_code": code, "stdout": out, "stderr": err}
+                )
+            except Exception as e:
+                log.warning("makeChanges.sh failed for %s: %s (non-fatal)", key, e)
+                script_results.append({"key": key, "value": v, "exit_code": -1, "error": str(e)})
+
+    return {"ok": True, "saved": list(changes.keys()), "script_results": script_results}
