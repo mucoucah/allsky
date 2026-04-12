@@ -65,28 +65,31 @@ export default function Setup() {
   // Already configured — show summary with controls.
   if (status?.configured && status?.has_camera && step !== "done") {
     return (
-      <div className="max-w-xl mx-auto flex flex-col gap-4">
-        <div className="card text-center py-6">
-          <Check size={48} className="text-ok mx-auto mb-4" />
-          <h2 className="text-lg font-semibold mb-2">Camera configured</h2>
-          <p className="text-ink-muted text-sm">
-            {status.camera_model || status.camera_type || "Unknown camera"}
-          </p>
-          <div className="flex items-center justify-center gap-2 mt-3">
-            <span className={`pill ${status.service_active ? "pill-ok" : "pill-err"}`}>
-              {status.service_active ? "running" : "stopped"}
-            </span>
+      <div className="max-w-2xl mx-auto flex flex-col gap-4">
+        <div className="card flex items-center gap-4">
+          <Check size={32} className="text-ok shrink-0" />
+          <div className="flex-1">
+            <h2 className="text-lg font-semibold">Camera configured</h2>
+            <p className="text-ink-muted text-sm">
+              {status.camera_model || status.camera_type || "Unknown camera"}
+            </p>
           </div>
+          <span className={`pill ${status.service_active ? "pill-ok" : "pill-err"}`}>
+            {status.service_active ? "running" : "stopped"}
+          </span>
         </div>
+
+        {/* Location — always visible so user can update */}
+        <LocationSection lat={lat} lon={lon} setLat={setLat} setLon={setLon} />
 
         <div className="card flex flex-wrap gap-2 justify-center">
           {!status.service_active && (
             <button
-              onClick={() => startService.mutate()}
-              disabled={startService.isPending}
+              onClick={() => configure.mutate()}
+              disabled={configure.isPending || !lat || !lon}
               className="px-4 py-2 rounded-lg bg-ok text-bg-base font-medium inline-flex items-center gap-2"
             >
-              <Play size={16} /> Start camera
+              <Play size={16} /> {lat && lon ? "Save & Start camera" : "Enter location first"}
             </button>
           )}
           {status.service_active && (
@@ -101,7 +104,7 @@ export default function Setup() {
             onClick={() => { setStep("detect"); }}
             className="px-4 py-2 rounded-lg border border-bg-raised text-sm"
           >
-            Reconfigure
+            Change camera
           </button>
           <button
             onClick={() => navigate("/")}
