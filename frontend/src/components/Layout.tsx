@@ -35,6 +35,7 @@ export default function Layout() {
             <div className="font-semibold tracking-tight">Allsky</div>
             <div className="text-ink-dim text-xs hidden sm:block">
               v{health?.version ?? "..."}
+            </div>
           </div>
         </div>
       </header>
