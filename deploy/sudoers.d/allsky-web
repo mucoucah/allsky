@@ -1,0 +1,9 @@
+# Drop-in for /etc/sudoers.d/allsky-web — install with `visudo -cf` first.
+#
+# Allow only the three systemctl verbs needed for service control. Nothing
+# else is granted; in particular, the user can NOT modify settings via this
+# rule (those go through allsky's own makeChanges.sh as the same user, which
+# requires no sudo).
+allskyweb ALL=(root) NOPASSWD: /usr/bin/systemctl start allsky.service
+allskyweb ALL=(root) NOPASSWD: /usr/bin/systemctl stop allsky.service
+allskyweb ALL=(root) NOPASSWD: /usr/bin/systemctl restart allsky.service
