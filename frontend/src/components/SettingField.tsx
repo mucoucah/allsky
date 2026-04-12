@@ -38,55 +38,51 @@ export function SettingField({ def, value, onChange, disabled, dirty }: Props) {
   const errors = fieldErrors(def, value);
   const borderClass =
     errors.length > 0 ? "border-err" : dirty ? "border-accent" : "border-bg-raised";
-  const inputBase = `bg-bg-base border rounded px-2 py-0.5 text-sm font-mono disabled:opacity-50 ${borderClass}`;
+  const inputBase = `bg-bg-base border rounded px-2 py-0.5 text-xs font-mono disabled:opacity-50 ${borderClass}`;
 
   const hasDefault = def.default !== null && def.default !== undefined && def.default !== "";
   const isAtDefault = hasDefault && String(value) === String(def.default);
-
-  // Size the input based on type.
-  const isNumber = def.type === "integer" || def.type === "float" || def.type === "percent";
   const isBoolean = def.type === "boolean";
-  const isWide = def.type === "widetext" || def.type === "text";
-  const inputCls = isNumber
-    ? `${inputBase} w-24`
-    : isWide
-    ? `${inputBase} w-full`
-    : `${inputBase} w-48`;
+
+  // All inputs are compact — numbers and strings alike.
+  const inputCls = `${inputBase} w-28`;
 
   return (
-    <div className="flex items-start gap-2 py-1.5">
-      {/* Label column */}
-      <label htmlFor={id} className="text-sm shrink-0 w-[200px] pt-0.5">
-        <span className="text-ink font-medium">{def.label}</span>
+    <div className="flex items-center gap-3 py-[5px] group" title={def.description ? def.description.replace(/<[^>]*>/g, '') : undefined}>
+      {/* Label */}
+      <label htmlFor={id} className="text-xs shrink-0 w-[200px] truncate">
+        <span className="text-ink">{def.label}</span>
         {def.action === "reload" && (
-          <span className="ml-1 text-[9px] uppercase text-warn">restart</span>
+          <span className="ml-1 text-[8px] uppercase text-warn">restart</span>
         )}
-        {dirty && <span className="ml-1 text-[10px] text-accent">&#9679;</span>}
-        {def.description && (
-          <div
-            className="text-[11px] text-ink-dim mt-0.5 leading-tight [&_a]:text-accent [&_a]:underline"
-            dangerouslySetInnerHTML={{ __html: fixDocLinks(def.description) }}
-          />
-        )}
+        {dirty && <span className="ml-1 text-[9px] text-accent">&#9679;</span>}
       </label>
 
-      {/* Input column */}
-      <div className="flex items-center gap-2 flex-1 min-w-0">
-        {renderWidget(def, value, onChange, disabled, id, inputCls)}
-        {hasDefault && !isBoolean && (
-          <button
-            type="button"
-            className={`text-[10px] shrink-0 font-mono ${
-              isAtDefault ? "text-emerald-400" : "text-accent hover:underline"
-            }`}
-            title={isAtDefault ? "At default" : `Reset to ${def.default}`}
-            onClick={() => { if (!isAtDefault && !disabled) onChange(def.default); }}
-            disabled={disabled || isAtDefault}
-          >
-            {isAtDefault ? "\u2713" : `\u21ba${def.default}`}
-          </button>
-        )}
-      </div>
+      {/* Input */}
+      {renderWidget(def, value, onChange, disabled, id, inputCls)}
+
+      {/* Default */}
+      {hasDefault && !isBoolean && (
+        <button
+          type="button"
+          className={`text-[10px] shrink-0 font-mono ${
+            isAtDefault ? "text-emerald-400" : "text-accent hover:underline"
+          }`}
+          title={isAtDefault ? "At default" : `Reset to ${def.default}`}
+          onClick={() => { if (!isAtDefault && !disabled) onChange(def.default); }}
+          disabled={disabled || isAtDefault}
+        >
+          {isAtDefault ? "\u2713" : `\u21ba${def.default}`}
+        </button>
+      )}
+
+      {/* Description — inline, truncated, shows full on hover */}
+      {def.description && (
+        <span
+          className="text-[10px] text-ink-dim truncate hidden lg:inline opacity-60 group-hover:opacity-100 flex-1 min-w-0 [&_a]:text-accent"
+          dangerouslySetInnerHTML={{ __html: fixDocLinks(def.description) }}
+        />
+      )}
 
       {/* Errors */}
       {errors.length > 0 && (
@@ -185,21 +181,7 @@ function renderWidget(
     );
   }
 
-  // Long text
-  if (def.type === "widetext") {
-    return (
-      <textarea
-        id={id}
-        disabled={disabled}
-        rows={2}
-        value={value == null ? "" : String(value)}
-        onChange={(e) => onChange(e.target.value)}
-        className={`${cls} resize-y`}
-      />
-    );
-  }
-
-  // Default: text input
+  // Default: text input (covers text, widetext, string, and anything else)
   return (
     <input
       id={id}
