@@ -6,7 +6,6 @@ import {
   PowerOff, RotateCcw, ChevronDown, ChevronUp,
 } from "lucide-react";
 import { api, AllskyDiskUsage } from "../lib/api";
-import { Tile } from "../components/Tile";
 import { StatusPill } from "../components/StatusPill";
 
 export default function System() {
@@ -103,100 +102,96 @@ export default function System() {
         )}
       </div>
 
-      {/* CPU & Temperature */}
+      {/* System monitors — horizontal bar charts */}
       {h && (
-        <>
-          <h2 className="text-lg font-semibold flex items-center gap-2">
-            <Cpu size={18} /> CPU & Temperature
-          </h2>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <Tile
+        <div className="card">
+          <h2 className="text-lg font-semibold mb-4">System Monitor</h2>
+          <div className="flex flex-col gap-4">
+            {/* CPU Temperature */}
+            <BarMeter
               label="CPU Temperature"
-              value={h.cpu_temp_c?.toFixed(1) ?? "—"}
-              hint="°C"
-              status={
-                h.cpu_temp_c == null ? undefined
-                  : h.cpu_temp_c < 65 ? "ok"
-                  : h.cpu_temp_c < 80 ? "warn" : "err"
-              }
+              value={h.cpu_temp_c ?? 0}
+              max={100}
+              unit="°C"
+              detail={`${h.cpu_info.cores_logical ?? "?"} cores \u00b7 ${h.cpu_info.architecture}`}
+              thresholds={[65, 80]}
             />
-            <Tile label="CPU Usage" value={`${h.cpu_percent.toFixed(0)}%`} />
-            <Tile
-              label="CPU Cores"
-              value={`${h.cpu_info.cores_logical ?? "?"}`}
-              hint={h.cpu_info.architecture}
-            />
-            <Tile label="Load 1m" value={h.load_avg["1m"].toFixed(2)} />
-            <Tile label="Load 5m" value={h.load_avg["5m"].toFixed(2)} />
-            <Tile label="Load 15m" value={h.load_avg["15m"].toFixed(2)} />
-            <Tile
-              label="Uptime"
-              value={fmtUptime(h.uptime_seconds)}
-              hint={`Boot: ${new Date(h.boot_time * 1000).toLocaleString()}`}
-            />
-          </div>
 
-          {/* Throttle warnings */}
-          {h.throttle && (
-            <ThrottleWarnings throttle={h.throttle} />
-          )}
-        </>
-      )}
+            {/* CPU Usage */}
+            <BarMeter
+              label="CPU Usage"
+              value={h.cpu_percent}
+              max={100}
+              unit="%"
+              detail={`Load: ${h.load_avg["1m"].toFixed(2)} / ${h.load_avg["5m"].toFixed(2)} / ${h.load_avg["15m"].toFixed(2)}`}
+              thresholds={[70, 90]}
+            />
 
-      {/* Memory */}
-      {h && (
-        <>
-          <h2 className="text-lg font-semibold flex items-center gap-2">
-            <MemoryStick size={18} /> Memory
-          </h2>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <Tile
-              label="RAM Usage"
-              value={`${h.memory.percent.toFixed(0)}%`}
-              hint={`${fmtBytes(h.memory.used)} / ${fmtBytes(h.memory.total)}`}
-              status={h.memory.percent < 85 ? "ok" : h.memory.percent < 95 ? "warn" : "err"}
+            {/* RAM */}
+            <BarMeter
+              label="Memory (RAM)"
+              value={h.memory.percent}
+              max={100}
+              unit="%"
+              detail={`${fmtBytes(h.memory.used)} used of ${fmtBytes(h.memory.total)} \u00b7 ${fmtBytes(h.memory.available)} free`}
+              thresholds={[75, 90]}
             />
-            <Tile
-              label="RAM Available"
-              value={fmtBytes(h.memory.available)}
-              hint={`of ${fmtBytes(h.memory.total)}`}
-            />
-            <Tile
-              label="Swap Usage"
-              value={h.swap.total > 0 ? `${h.swap.percent.toFixed(0)}%` : "None"}
-              hint={h.swap.total > 0 ? `${fmtBytes(h.swap.used)} / ${fmtBytes(h.swap.total)}` : "No swap configured"}
-            />
-          </div>
-        </>
-      )}
 
-      {/* Disk */}
-      {h && (
-        <>
-          <h2 className="text-lg font-semibold flex items-center gap-2">
-            <HardDrive size={18} /> Disk
-          </h2>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <Tile
-              label="Root (/)"
-              value={`${h.disk_root.percent.toFixed(0)}%`}
-              hint={`${fmtBytes(h.disk_root.free)} free of ${fmtBytes(h.disk_root.total)}`}
-              status={h.disk_root.percent < 80 ? "ok" : h.disk_root.percent < 92 ? "warn" : "err"}
-            />
-            {h.disk.path !== "/" && (
-              <Tile
-                label={`Data (${h.disk.path})`}
-                value={`${h.disk.percent.toFixed(0)}%`}
-                hint={`${fmtBytes(h.disk.free)} free of ${fmtBytes(h.disk.total)}`}
-                status={h.disk.percent < 80 ? "ok" : h.disk.percent < 92 ? "warn" : "err"}
+            {/* Swap */}
+            {h.swap.total > 0 && (
+              <BarMeter
+                label="Swap"
+                value={h.swap.percent}
+                max={100}
+                unit="%"
+                detail={`${fmtBytes(h.swap.used)} used of ${fmtBytes(h.swap.total)}`}
+                thresholds={[50, 80]}
               />
             )}
-          </div>
 
-          {/* Allsky storage breakdown */}
-          {allskyDisk && <AllskyStorageBreakdown usage={allskyDisk} />}
-        </>
+            {/* Disk root */}
+            <BarMeter
+              label="Disk (/)"
+              value={h.disk_root.percent}
+              max={100}
+              unit="%"
+              detail={`${fmtBytes(h.disk_root.used)} used of ${fmtBytes(h.disk_root.total)} \u00b7 ${fmtBytes(h.disk_root.free)} free`}
+              thresholds={[75, 90]}
+            />
+
+            {/* Disk data (if different mount) */}
+            {h.disk.path !== "/" && (
+              <BarMeter
+                label={`Disk (${h.disk.path})`}
+                value={h.disk.percent}
+                max={100}
+                unit="%"
+                detail={`${fmtBytes(h.disk.used)} used of ${fmtBytes(h.disk.total)} \u00b7 ${fmtBytes(h.disk.free)} free`}
+                thresholds={[75, 90]}
+              />
+            )}
+
+            {/* Uptime */}
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-ink-muted flex items-center gap-2">
+                <Clock size={14} /> Uptime
+              </span>
+              <span className="font-mono">
+                {fmtUptime(h.uptime_seconds)}
+                <span className="text-ink-dim text-xs ml-2">
+                  (boot: {new Date(h.boot_time * 1000).toLocaleString()})
+                </span>
+              </span>
+            </div>
+          </div>
+        </div>
       )}
+
+      {/* Throttle warnings */}
+      {h?.throttle && <ThrottleWarnings throttle={h.throttle} />}
+
+      {/* Allsky storage breakdown */}
+      {allskyDisk && <AllskyStorageBreakdown usage={allskyDisk} />}
 
       {/* Network */}
       {h && h.network.length > 0 && (
@@ -450,6 +445,51 @@ const STORAGE_COLORS = [
   "bg-blue-500", "bg-purple-500", "bg-emerald-500", "bg-amber-500",
   "bg-rose-500", "bg-cyan-500", "bg-orange-500",
 ];
+
+/* ── Bar meter (horizontal bar chart like original allsky) ────── */
+
+function BarMeter({ label, value, max, unit, detail, thresholds }: {
+  label: string;
+  value: number;
+  max: number;
+  unit: string;
+  detail?: string;
+  thresholds?: [number, number]; // [warn, err]
+}) {
+  const pct = Math.min((value / max) * 100, 100);
+  const [warnAt, errAt] = thresholds ?? [70, 90];
+  const color = value >= errAt ? "bg-red-500" : value >= warnAt ? "bg-amber-500" : "bg-emerald-500";
+  const textColor = value >= errAt ? "text-red-400" : value >= warnAt ? "text-amber-400" : "text-emerald-400";
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-1">
+        <span className="text-sm text-ink-muted">{label}</span>
+        <span className={`text-sm font-mono font-medium ${textColor}`}>
+          {value.toFixed(value < 10 ? 1 : 0)}{unit}
+        </span>
+      </div>
+      <div className="h-5 rounded-full overflow-hidden bg-bg-base border border-bg-raised relative">
+        <div
+          className={`h-full rounded-full transition-all duration-700 ease-out ${color}`}
+          style={{ width: `${pct}%` }}
+        />
+        {/* Threshold markers */}
+        <div
+          className="absolute top-0 bottom-0 w-px bg-amber-500/30"
+          style={{ left: `${(warnAt / max) * 100}%` }}
+        />
+        <div
+          className="absolute top-0 bottom-0 w-px bg-red-500/30"
+          style={{ left: `${(errAt / max) * 100}%` }}
+        />
+      </div>
+      {detail && (
+        <div className="text-[11px] text-ink-dim mt-0.5">{detail}</div>
+      )}
+    </div>
+  );
+}
 
 /* ── Helpers ────────────────────────────────────────────────────── */
 
