@@ -91,11 +91,14 @@ cyan "==> [2/6] Setting up Allsky camera backend"
 
 # Compile the capture binary if not already built.
 if [[ ! -f "${ALLSKY_HOME}/bin/capture_RPi" && -f "${ALLSKY_HOME}/src/Makefile" ]]; then
-  cyan "    Compiling capture binary..."
+  cyan "    Installing build dependencies (libopencv, libusb)..."
+  apt-get install -y -qq libopencv-dev libusb-dev libusb-1.0-0-dev g++ make 2>/dev/null || true
+
+  cyan "    Compiling capture binary (this takes a few minutes)..."
   pushd "${ALLSKY_HOME}/src" >/dev/null
-  make -j"$(nproc)" all 2>&1 | tail -5 || {
-    yellow "    Capture binary build failed (may need libcamera-dev)."
-    yellow "    The web UI will still work, but live capture won't start."
+  make -j"$(nproc)" all 2>&1 | tail -10 || {
+    yellow "    Capture binary build skipped or failed."
+    yellow "    The web UI will still work. You can retry later from the System page."
   }
   popd >/dev/null
 fi
@@ -154,7 +157,7 @@ fi
 if [[ ! -d "${ALLSKY_HOME}/venv" ]]; then
   cyan "    Creating Allsky Python venv..."
   python3 -m venv "${ALLSKY_HOME}/venv"
-  "${ALLSKY_HOME}/venv/bin/pip" install --quiet --upgrade pip 2>&1 | tail -1 || true
+  "${ALLSKY_HOME}/venv/bin/pip" install --quiet --upgrade pip setuptools wheel 2>&1 | tail -1 || true
   # Install Allsky's Python requirements if they exist.
   for req in "${ALLSKY_HOME}/config_repo/requirements"*.txt; do
     [[ -f "$req" ]] && "${ALLSKY_HOME}/venv/bin/pip" install --quiet -r "$req" 2>&1 | tail -1 || true
@@ -270,11 +273,13 @@ RestartSec=3
 WantedBy=multi-user.target
 SVCEOF
 
-# Sudoers.
+# Sudoers — allow web UI to control services, enable camera, and reboot.
 cat >/etc/sudoers.d/allsky-web <<SUDOEOF
 ${SERVICE_USER} ALL=(root) NOPASSWD: /usr/bin/systemctl start allsky.service
 ${SERVICE_USER} ALL=(root) NOPASSWD: /usr/bin/systemctl stop allsky.service
 ${SERVICE_USER} ALL=(root) NOPASSWD: /usr/bin/systemctl restart allsky.service
+${SERVICE_USER} ALL=(root) NOPASSWD: /usr/bin/raspi-config nonint *
+${SERVICE_USER} ALL=(root) NOPASSWD: /usr/sbin/reboot
 SUDOEOF
 chmod 0440 /etc/sudoers.d/allsky-web
 visudo -cf /etc/sudoers.d/allsky-web >/dev/null 2>&1 || true
@@ -306,16 +311,6 @@ else
   echo  "  Check: sudo journalctl -u allsky-web -n 30"
 fi
 echo ""
-cyan  "  Next steps:"
-echo  "    1. Open the web UI and configure your camera settings"
-echo  "    2. Start the camera: sudo systemctl start allsky"
-echo  "    3. Set up notifications (Telegram, Discord, etc.) in the UI"
-echo ""
-cyan  "  Useful commands:"
-echo  "    sudo systemctl status allsky        # camera capture"
-echo  "    sudo systemctl status allsky-web     # web interface"
-echo  "    sudo journalctl -u allsky-web -f     # web UI logs"
-echo  "    sudo journalctl -u allsky -f         # camera logs"
-echo ""
-cyan  "  Config: ${ENV_FILE}"
+cyan  "  Everything is managed from the browser — no more terminal needed."
+cyan  "  The setup wizard will guide you through camera configuration."
 echo ""

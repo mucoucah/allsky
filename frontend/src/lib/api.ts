@@ -98,8 +98,12 @@ export const api = {
   }>("/setup/detect-cameras"),
   configure: (body: {
     camera_type?: string; camera_model?: string; camera_number?: number;
-    latitude?: string; longitude?: string;
-  }) => request<{ ok: boolean }>("/setup/configure", { method: "POST", json: body }),
+    latitude?: string; longitude?: string; start_capture?: boolean;
+  }) => request<{ ok: boolean; service_started?: boolean }>("/setup/configure", { method: "POST", json: body }),
+  enableCamera: () => request<{ results: unknown[]; needs_reboot: boolean; message: string }>(
+    "/setup/enable-camera", { method: "POST" },
+  ),
+  reboot: () => request<{ ok: boolean; message: string }>("/setup/reboot", { method: "POST" }),
   system: () => request<SystemSnapshot>("/system"),
   messages: () => request<Array<{ type: string; timestamp: string; id: string; message: string }>>(
     "/system/messages",

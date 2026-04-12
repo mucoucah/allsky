@@ -1,6 +1,6 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import { Wrench } from "lucide-react";
+import { Wrench, Play, Square } from "lucide-react";
 import { api, fileUrl } from "../lib/api";
 import { useLiveSocket } from "../hooks/useLiveSocket";
 import { Tile } from "../components/Tile";
@@ -23,7 +23,16 @@ function fmtUptime(s: number): string {
 }
 
 export default function Dashboard() {
+  const qc = useQueryClient();
   const { frameUrl, meta, connected } = useLiveSocket();
+
+  const serviceAction = useMutation({
+    mutationFn: api.serviceControl,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["system"] });
+      qc.invalidateQueries({ queryKey: ["setupStatus"] });
+    },
+  });
 
   const { data: sys } = useQuery({
     queryKey: ["system"],
@@ -121,6 +130,35 @@ export default function Dashboard() {
             <div className="flex items-center justify-between">
               <span className="text-ink-muted text-sm">Uptime</span>
               <span className="font-mono text-sm">{fmtUptime(sys.host.uptime_seconds)}</span>
+            </div>
+            {/* Camera controls */}
+            <div className="flex gap-2 mt-1 pt-2 border-t border-bg-raised">
+              {sys.allsky.status.toLowerCase().includes("running") ? (
+                <>
+                  <button
+                    onClick={() => serviceAction.mutate("restart")}
+                    disabled={serviceAction.isPending}
+                    className="flex-1 px-3 py-1.5 rounded-lg border border-bg-raised text-sm hover:bg-bg-raised disabled:opacity-50"
+                  >
+                    Restart
+                  </button>
+                  <button
+                    onClick={() => serviceAction.mutate("stop")}
+                    disabled={serviceAction.isPending}
+                    className="flex-1 px-3 py-1.5 rounded-lg border border-err/30 text-err text-sm hover:bg-err/10 disabled:opacity-50 inline-flex items-center justify-center gap-1"
+                  >
+                    <Square size={12} /> Stop
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={() => serviceAction.mutate("start")}
+                  disabled={serviceAction.isPending}
+                  className="flex-1 px-3 py-1.5 rounded-lg bg-ok text-bg-base text-sm font-medium disabled:opacity-50 inline-flex items-center justify-center gap-1"
+                >
+                  <Play size={14} /> Start camera
+                </button>
+              )}
             </div>
           </>
         ) : (
