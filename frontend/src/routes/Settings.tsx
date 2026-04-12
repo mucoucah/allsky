@@ -231,20 +231,18 @@ export default function Settings() {
                   {sectionName}
                 </h3>
               )}
-              <div className="flex flex-col divide-y divide-bg-raised max-w-2xl">
+              <div className="divide-y divide-bg-raised/50">
                 {filtered.map((def) => (
-                  <div key={def.name} className="py-3 first:pt-0 last:pb-0">
-                    <SettingField
-                      def={def}
-                      value={draft[def.name]}
-                      dirty={def.name in dirty}
-                      disabled={!evaluateDepends(def.depends_on, draft)}
-                      onChange={(next) =>
-                        setDraft((cur) => ({ ...cur, [def.name]: next }))
-                      }
-                    />
-                  </div>
-                ))}
+                  <SettingField
+                    key={def.name}
+                    def={def}
+                    value={draft[def.name]}
+                    dirty={def.name in dirty}
+                    disabled={!evaluateDepends(def.depends_on, draft)}
+                    onChange={(next) =>
+                      setDraft((cur) => ({ ...cur, [def.name]: next }))
+                    }
+                  />
               </div>
             </section>
           );

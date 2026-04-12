@@ -36,60 +36,61 @@ interface Props {
 export function SettingField({ def, value, onChange, disabled, dirty }: Props) {
   const id = useId();
   const errors = fieldErrors(def, value);
-  const baseInput =
-    "bg-bg-base border rounded-lg px-2 py-1 text-sm font-mono w-full disabled:opacity-50";
   const borderClass =
     errors.length > 0 ? "border-err" : dirty ? "border-accent" : "border-bg-raised";
+  const inputBase = `bg-bg-base border rounded px-2 py-0.5 text-sm font-mono disabled:opacity-50 ${borderClass}`;
 
   const hasDefault = def.default !== null && def.default !== undefined && def.default !== "";
   const isAtDefault = hasDefault && String(value) === String(def.default);
 
+  // Size the input based on type.
+  const isNumber = def.type === "integer" || def.type === "float" || def.type === "percent";
+  const isBoolean = def.type === "boolean";
+  const isWide = def.type === "widetext" || def.type === "text";
+  const inputCls = isNumber
+    ? `${inputBase} w-24`
+    : isWide
+    ? `${inputBase} w-full`
+    : `${inputBase} w-48`;
+
   return (
-    <div className="flex flex-col gap-1">
-      {/* Row 1: Label + Input on same line */}
-      <div className="flex items-center gap-3">
-        <label htmlFor={id} className="text-ink text-sm font-medium shrink-0 min-w-[180px]">
-          {def.label}
-          {def.action === "reload" && (
-            <span
-              className="ml-1.5 text-[10px] uppercase tracking-wide text-warn"
-              title="Changing this restarts Allsky"
-            >
-              restart
-            </span>
-          )}
-          {dirty && <span className="ml-1 text-[10px] text-accent">&#9679;</span>}
-        </label>
-        <div className="flex-1 max-w-md">
-          {renderWidget(def, value, onChange, disabled, id, `${baseInput} ${borderClass}`)}
-        </div>
-        {/* Default reset button inline */}
-        {hasDefault && def.type !== "boolean" && (
+    <div className="flex items-start gap-2 py-1.5">
+      {/* Label column */}
+      <label htmlFor={id} className="text-sm shrink-0 w-[200px] pt-0.5">
+        <span className="text-ink font-medium">{def.label}</span>
+        {def.action === "reload" && (
+          <span className="ml-1 text-[9px] uppercase text-warn">restart</span>
+        )}
+        {dirty && <span className="ml-1 text-[10px] text-accent">&#9679;</span>}
+        {def.description && (
+          <div
+            className="text-[11px] text-ink-dim mt-0.5 leading-tight [&_a]:text-accent [&_a]:underline"
+            dangerouslySetInnerHTML={{ __html: fixDocLinks(def.description) }}
+          />
+        )}
+      </label>
+
+      {/* Input column */}
+      <div className="flex items-center gap-2 flex-1 min-w-0">
+        {renderWidget(def, value, onChange, disabled, id, inputCls)}
+        {hasDefault && !isBoolean && (
           <button
             type="button"
-            className={`text-[11px] shrink-0 font-mono px-1.5 py-0.5 rounded ${
-              isAtDefault
-                ? "text-emerald-400"
-                : "text-accent hover:underline cursor-pointer"
+            className={`text-[10px] shrink-0 font-mono ${
+              isAtDefault ? "text-emerald-400" : "text-accent hover:underline"
             }`}
             title={isAtDefault ? "At default" : `Reset to ${def.default}`}
             onClick={() => { if (!isAtDefault && !disabled) onChange(def.default); }}
             disabled={disabled || isAtDefault}
           >
-            {isAtDefault ? "\u2713" : `\u21ba ${String(def.default)}`}
+            {isAtDefault ? "\u2713" : `\u21ba${def.default}`}
           </button>
         )}
       </div>
 
-      {/* Row 2: Description + errors */}
-      {def.description && (
-        <div
-          className="text-xs text-ink-dim ml-[180px] pl-3 [&_a]:text-accent [&_a]:underline"
-          dangerouslySetInnerHTML={{ __html: fixDocLinks(def.description) }}
-        />
-      )}
+      {/* Errors */}
       {errors.length > 0 && (
-        <div className="text-xs text-err ml-[180px] pl-3">{errors.join(", ")}</div>
+        <span className="text-[10px] text-err shrink-0">{errors.join(", ")}</span>
       )}
     </div>
   );
@@ -185,12 +186,12 @@ function renderWidget(
   }
 
   // Long text
-  if (def.type === "widetext" || def.type === "text") {
+  if (def.type === "widetext") {
     return (
       <textarea
         id={id}
         disabled={disabled}
-        rows={3}
+        rows={2}
         value={value == null ? "" : String(value)}
         onChange={(e) => onChange(e.target.value)}
         className={`${cls} resize-y`}
