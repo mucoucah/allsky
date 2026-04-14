@@ -272,13 +272,13 @@ for settings_path in paths:
             print(f'    Set nighttimeoverlay = {overlay_file}')
         # Resolve placeholder values in numeric/boolean settings.
         placeholders = {
-            'daymean': 0.5, 'nightmean': 0.3,
+            'daymean': 0.5, 'nightmean': 0.2,
             'daymeanthreshold': 0.1, 'nightmeanthreshold': 0.1,
             'dayautogain': True, 'nightautogain': True,
-            'daymaxautoexposure': 10000, 'nightmaxautoexposure': 60000,
-            'daymaxautogain': 16, 'nightmaxautogain': 16,
+            'daymaxautoexposure': 10000, 'nightmaxautoexposure': 90000,
+            'daymaxautogain': 10, 'nightmaxautogain': 30,
             'dayexposure': 300000, 'nightexposure': 20000000,
-            'daygain': 1, 'nightgain': 1,
+            'daygain': 1, 'nightgain': 10,
             'daydelay': 10000, 'nightdelay': 10000,
             'daywbr': 2.5, 'daywbb': 2.0, 'nightwbr': 2.5, 'nightwbb': 2.0,
             'saturation': 1.0, 'contrast': 0.0, 'sharpness': 0.0,
