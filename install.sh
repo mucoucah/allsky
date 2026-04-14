@@ -320,23 +320,38 @@ green "    Updated allsky.service (ExecStart=${ALLSKY_HOME}/allsky.sh)."
 if [[ ! -d "${ALLSKY_HOME}/venv" ]]; then
   cyan "    Creating Allsky Python venv..."
   python3 -m venv --system-site-packages "${ALLSKY_HOME}/venv"
-  "${ALLSKY_HOME}/venv/bin/python3" -m ensurepip --upgrade 2>/dev/null || true
-  "${ALLSKY_HOME}/venv/bin/pip" install --quiet --upgrade pip setuptools wheel 2>&1 | tail -1 || true
 fi
 
-# Always ensure essential overlay module dependencies are installed (PIL, ephem, etc.).
+# ALWAYS ensure setuptools/wheel/pip are current — required to build packages.
+# Without this, pillow/ephem/etc. fail with "Cannot import setuptools.build_meta".
+"${ALLSKY_HOME}/venv/bin/python3" -m ensurepip --upgrade 2>/dev/null || true
+"${ALLSKY_HOME}/venv/bin/pip" install --quiet --upgrade pip setuptools wheel 2>&1 | tail -1 || true
+
+# Install essential overlay module dependencies (PIL, ephem, etc.).
 # These are required for flow-runner.py to render overlays.
 cyan "    Installing overlay module dependencies..."
 "${ALLSKY_HOME}/venv/bin/pip" install --quiet \
   pillow ephem skyfield astral pytz requests paho-mqtt \
   2>&1 | tail -3 || yellow "    Some overlay deps may be missing — overlay may not work."
 
-# Install Allsky's Python requirements if they exist (best-effort).
-for req in "${ALLSKY_HOME}/config_repo/requirements"*.txt; do
-  if [[ -f "$req" ]]; then
-    "${ALLSKY_HOME}/venv/bin/pip" install --quiet -r "$req" 2>&1 | tail -1 || true
-  fi
-done
+# Install ONLY the appropriate Allsky requirements file for this system.
+# Don't use requirements-buster.txt — it has pinned versions (numpy==1.21.4)
+# that don't exist for Python 3.12+.
+ARCH_BITS="$(getconf LONG_BIT 2>/dev/null || echo 64)"
+OS_CODENAME="$(grep -oP '(?<=^VERSION_CODENAME=).+' /etc/os-release 2>/dev/null | tr -d '"' || echo bookworm)"
+REQ_FILE=""
+if [[ -f "${ALLSKY_HOME}/config_repo/requirements-${OS_CODENAME}-${ARCH_BITS}.txt" ]]; then
+  REQ_FILE="${ALLSKY_HOME}/config_repo/requirements-${OS_CODENAME}-${ARCH_BITS}.txt"
+elif [[ -f "${ALLSKY_HOME}/config_repo/requirements-${ARCH_BITS}.txt" ]]; then
+  REQ_FILE="${ALLSKY_HOME}/config_repo/requirements-${ARCH_BITS}.txt"
+elif [[ -f "${ALLSKY_HOME}/config_repo/requirements.txt" ]]; then
+  REQ_FILE="${ALLSKY_HOME}/config_repo/requirements.txt"
+fi
+if [[ -n "${REQ_FILE}" ]]; then
+  cyan "    Installing Allsky requirements from $(basename "${REQ_FILE}")..."
+  "${ALLSKY_HOME}/venv/bin/pip" install --quiet -r "${REQ_FILE}" 2>&1 | tail -2 || \
+    yellow "    Some Allsky Python deps failed — overlay modules may be limited."
+fi
 green "    Allsky Python venv ready."
 
 # Copy overlay config templates if not already in place.
