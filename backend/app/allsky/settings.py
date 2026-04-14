@@ -35,11 +35,55 @@ class SettingDef:
     raw: dict | None = None
 
 
-def _coerce_number(value: Any) -> Any:
+"""Resolve placeholder values for camera-specific defaults.
+
+Upstream options.json uses sentinel strings like "day_default", "night_default",
+"_min", "_max", "_default" that are replaced by upstream's createAllskyOptions.php
+based on camera capabilities. Since we don't have that resolver, we provide
+sensible defaults here for the common settings.
+"""
+PLACEHOLDER_DEFAULTS: dict[str, Any] = {
+    # Mean exposure target (brightness 0.0-1.0)
+    "daymean": 0.5,
+    "nightmean": 0.3,
+    "daymeanthreshold": 0.1,
+    "nightmeanthreshold": 0.1,
+    # Max auto-exposure in ms
+    "daymaxautoexposure": 10_000,   # 10 sec
+    "nightmaxautoexposure": 60_000,  # 60 sec
+    # Default exposure in us
+    "dayexposure": 300_000,   # 300 ms
+    "nightexposure": 20_000_000,  # 20 sec
+    # Gain
+    "daygain": 1,
+    "nightgain": 1,
+    "daymaxautogain": 16,
+    "nightmaxautogain": 16,
+    # Delay between images (ms)
+    "daydelay": 10000,  # 10 sec
+    "nightdelay": 10000,  # 10 sec
+    # Stretch
+    "daystretchmidpoint": 10,
+    "nightstretchmidpoint": 10,
+}
+
+# Human-friendly label overrides (upstream is a bit cryptic).
+LABEL_OVERRIDES: dict[str, str] = {
+    "daymean": "Mean Exposure Target",
+    "nightmean": "Mean Exposure Target",
+    "daymeanthreshold": "Mean Exposure Threshold",
+    "nightmeanthreshold": "Mean Exposure Threshold",
+}
+
+
+def _coerce_number(value: Any, name: str = "") -> Any:
     """options.json sometimes uses sentinel strings like '_min' or 'day_default'.
-    Those are camera-driver-supplied placeholders. Return None for now."""
-    if isinstance(value, str) and (value.startswith("_") or value.endswith("_default")):
-        return None
+    Those are camera-driver-supplied placeholders — resolve from PLACEHOLDER_DEFAULTS.
+    """
+    if isinstance(value, str):
+        # Resolve to sensible default if we have one for this field.
+        if value.startswith("_") or value.endswith("_default") or value.endswith("_min") or value.endswith("_max"):
+            return PLACEHOLDER_DEFAULTS.get(name)
     return value
 
 
@@ -79,15 +123,18 @@ def load_schema() -> list[SettingDef]:
         if not name or name.startswith("XX_") or "===" in name:
             continue
 
+        # Apply friendly label override if we have one.
+        effective_label = LABEL_OVERRIDES.get(name, label or name)
+
         defs.append(
             SettingDef(
                 name=name,
                 type=etype or "string",
-                label=label or name,
+                label=effective_label,
                 description=entry.get("description", ""),
-                default=_coerce_number(entry.get("default")),
-                minimum=_coerce_number(entry.get("minimum")),
-                maximum=_coerce_number(entry.get("maximum")),
+                default=_coerce_number(entry.get("default"), name),
+                minimum=_coerce_number(entry.get("minimum"), name),
+                maximum=_coerce_number(entry.get("maximum"), name),
                 tab=current_tab,
                 section=current_section,
                 depends_on=entry.get("booldependson"),
@@ -127,12 +174,17 @@ def load_values() -> dict[str, Any]:
             try:
                 raw[key] = int(value)
             except ValueError:
-                pass
+                # Placeholder like "day_default" — resolve from defaults.
+                fallback = PLACEHOLDER_DEFAULTS.get(key)
+                if fallback is not None:
+                    raw[key] = int(fallback)
         elif d.type in ("float", "percent") and isinstance(value, str):
             try:
                 raw[key] = float(value)
             except ValueError:
-                pass
+                fallback = PLACEHOLDER_DEFAULTS.get(key)
+                if fallback is not None:
+                    raw[key] = float(fallback)
     return raw
 
 
