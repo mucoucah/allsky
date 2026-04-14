@@ -281,7 +281,7 @@ for settings_path in paths:
             'daygain': 1, 'nightgain': 10,
             'daydelay': 10000, 'nightdelay': 10000,
             'daywbr': 2.5, 'daywbb': 2.0, 'nightwbr': 2.5, 'nightwbb': 2.0,
-            'saturation': 1.0, 'contrast': 0.0, 'sharpness': 0.0,
+            'saturation': 1.0, 'contrast': 1.0, 'sharpness': 1.0,
             'aggression': 75, 'gaintransitiontime': 5,
             'daytargettemp': 0, 'nighttargettemp': -5, 'usb': 40,
             'daystretchmidpoint': 10, 'nightstretchmidpoint': 10,
@@ -297,6 +297,17 @@ for settings_path in paths:
                 settings[k] = default_val
                 changed = True
                 print(f'    Resolved placeholder: {k} = {default_val}')
+        # Force-fix the contrast=0/sharpness=0 bug from v1.9.3-v1.9.10
+        # These cause rpicam-still to output flat gray images!
+        for bad_k in ('contrast', 'sharpness'):
+            v = settings.get(bad_k)
+            try:
+                if v is not None and float(v) == 0.0:
+                    settings[bad_k] = 1.0
+                    changed = True
+                    print(f'    BUGFIX: {bad_k} was 0 (causes gray images), set to 1.0')
+            except (ValueError, TypeError):
+                pass
         if changed:
             with open(settings_path, 'w') as out:
                 json.dump(settings, out, indent=4)
