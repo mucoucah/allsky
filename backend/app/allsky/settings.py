@@ -45,26 +45,27 @@ sensible defaults here for the common settings.
 PLACEHOLDER_DEFAULTS: dict[str, Any] = {
     # ── Mean exposure target (brightness 0.0-1.0) ──
     "daymean": 0.5,
-    "nightmean": 0.3,
+    "nightmean": 0.2,   # darker target — night should actually be dark-ish
     "daymeanthreshold": 0.1,
     "nightmeanthreshold": 0.1,
 
     # ── Auto-exposure / auto-gain ──
     "dayautogain": True,
     "nightautogain": True,
-    # Max auto-exposure in ms (upstream defaults: day=10s, night=60s)
+    # Max auto-exposure in ms.
     "daymaxautoexposure": 10_000,
-    "nightmaxautoexposure": 60_000,
-    "daymaxautogain": 16,
-    "nightmaxautogain": 16,
+    "nightmaxautoexposure": 90_000,  # 90 sec — more time for night exposures
+    "daymaxautogain": 10,
+    "nightmaxautogain": 30,
 
     # ── Exposure in us ──
     "dayexposure": 300_000,        # 300 ms
     "nightexposure": 20_000_000,   # 20 sec
 
     # ── Gain ──
+    # Night needs HIGH gain to capture stars. Day needs low to avoid blowout.
     "daygain": 1,
-    "nightgain": 1,
+    "nightgain": 10,      # was 1 — too low for actual night sky
 
     # ── Delay between images (ms) ──
     "daydelay": 10_000,   # 10 sec
