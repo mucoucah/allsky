@@ -120,14 +120,82 @@ LABEL_OVERRIDES: dict[str, str] = {
 }
 
 
-def _coerce_number(value: Any, name: str = "") -> Any:
-    """options.json sometimes uses sentinel strings like '_min' or 'day_default'.
-    Those are camera-driver-supplied placeholders — resolve from PLACEHOLDER_DEFAULTS.
+# Sensible MIN values for settings (used when schema has "_min" or similar placeholder).
+PLACEHOLDER_MINS: dict[str, Any] = {
+    # Mean values: 0.0-1.0 range
+    "daymean": 0.0, "nightmean": 0.0,
+    "daymeanthreshold": 0.0, "nightmeanthreshold": 0.0,
+    # Exposure: 1 us minimum
+    "daymaxautoexposure": 1, "nightmaxautoexposure": 1,
+    "dayexposure": 1, "nightexposure": 1,
+    # Gain
+    "daygain": 0.0, "nightgain": 0.0,
+    "daymaxautogain": 0.0, "nightmaxautogain": 0.0,
+    # Delays (allow 0)
+    "daydelay": 0, "nightdelay": 0,
+    # White balance
+    "daywbr": 0.0, "daywbb": 0.0, "nightwbr": 0.0, "nightwbb": 0.0,
+    # Image processing
+    "saturation": 0.0, "contrast": -1.0, "sharpness": 0.0,
+    "aggression": 0, "gaintransitiontime": 0,
+    # Cooled camera temp
+    "daytargettemp": -40, "nighttargettemp": -40,
+    "usb": 1,
+    # Stretch
+    "daystretchmidpoint": 0, "nightstretchmidpoint": 0,
+    # Crops and resize
+    "imagecroptop": 0, "imagecropbottom": 0,
+    "imagecropleft": 0, "imagecropright": 0,
+}
+
+# Sensible MAX values for settings (used when schema has "_max" or similar placeholder).
+PLACEHOLDER_MAXES: dict[str, Any] = {
+    "daymean": 1.0, "nightmean": 1.0,
+    "daymeanthreshold": 1.0, "nightmeanthreshold": 1.0,
+    # Max auto-exposure: 60 seconds (60000 ms) day, longer at night
+    "daymaxautoexposure": 60_000,
+    "nightmaxautoexposure": 240_000,   # 4 min max
+    # Exposure
+    "dayexposure": 60_000_000,       # 60 sec
+    "nightexposure": 240_000_000,    # 4 min
+    # Gain (ISO-style, upstream typical is 0-32)
+    "daygain": 32.0, "nightgain": 32.0,
+    "daymaxautogain": 32.0, "nightmaxautogain": 32.0,
+    # Delay: 1 hour
+    "daydelay": 3_600_000, "nightdelay": 3_600_000,
+    # White balance
+    "daywbr": 10.0, "daywbb": 10.0, "nightwbr": 10.0, "nightwbb": 10.0,
+    # Image processing
+    "saturation": 3.0, "contrast": 1.0, "sharpness": 10.0,
+    "aggression": 100, "gaintransitiontime": 60,
+    # Cooled camera temp
+    "daytargettemp": 40, "nighttargettemp": 40,
+    "usb": 100,
+    # Stretch
+    "daystretchmidpoint": 100, "nightstretchmidpoint": 100,
+    # Crops (percent-ish, up to full resolution but we don't know it)
+    "imagecroptop": 10_000, "imagecropbottom": 10_000,
+    "imagecropleft": 10_000, "imagecropright": 10_000,
+    # Resize
+    "imageresizeuploadswidth": 10_000, "imageresizeuploadsheight": 10_000,
+    "timelapsewidth": 10_000, "timelapseheight": 10_000,
+    "minitimelapsewidth": 10_000, "minitimelapseheight": 10_000,
+}
+
+
+def _coerce_number(value: Any, name: str = "", kind: str = "default") -> Any:
+    """Resolve placeholder strings to sensible numeric values.
+
+    kind: "default" | "min" | "max" — determines which fallback to use.
     """
     if isinstance(value, str):
-        # Resolve to sensible default if we have one for this field.
         if value.startswith("_") or value.endswith("_default") or value.endswith("_min") or value.endswith("_max"):
-            return PLACEHOLDER_DEFAULTS.get(name)
+            if kind == "min":
+                return PLACEHOLDER_MINS.get(name)
+            elif kind == "max":
+                return PLACEHOLDER_MAXES.get(name)
+            else:
+                return PLACEHOLDER_DEFAULTS.get(name)
     return value
 
 
@@ -176,9 +244,9 @@ def load_schema() -> list[SettingDef]:
                 type=etype or "string",
                 label=effective_label,
                 description=entry.get("description", ""),
-                default=_coerce_number(entry.get("default"), name),
-                minimum=_coerce_number(entry.get("minimum"), name),
-                maximum=_coerce_number(entry.get("maximum"), name),
+                default=_coerce_number(entry.get("default"), name, "default"),
+                minimum=_coerce_number(entry.get("minimum"), name, "min"),
+                maximum=_coerce_number(entry.get("maximum"), name, "max"),
                 tab=current_tab,
                 section=current_section,
                 depends_on=entry.get("booldependson"),

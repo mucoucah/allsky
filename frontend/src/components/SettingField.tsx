@@ -132,29 +132,25 @@ export function SettingField({ def, value, onChange, disabled, dirty }: Props) {
           {dirty && <span className="ml-1 text-[9px] text-accent">&#9679;</span>}
         </label>
         {renderWidget(def, value, onChange, disabled, id, inputCls)}
-        {hasDefault && !isBoolean && (
-          <button
-            type="button"
-            className={`text-[10px] shrink-0 font-mono ${
-              isAtDefault ? "text-emerald-400" : "text-accent hover:underline"
-            }`}
-            title={isAtDefault ? "At default" : `Reset to ${def.default}`}
-            onClick={() => { if (!isAtDefault && !disabled) onChange(def.default); }}
-            disabled={disabled || isAtDefault}
-          >
-            {isAtDefault ? "\u2713default" : `\u21ba${def.default}`}
-          </button>
-        )}
-        {/* Min/max range hint inline */}
-        {(hasMin || hasMax) && !isBoolean && (
-          <span className="text-[10px] text-ink-dim font-mono shrink-0">
-            {hasMin && hasMax ? (
-              <>[{String(def.minimum)}&ndash;{String(def.maximum)}]</>
-            ) : hasMin ? (
-              <>min {String(def.minimum)}</>
-            ) : (
-              <>max {String(def.maximum)}</>
+        {/* Meta: Default | Min | Max — in order */}
+        {!isBoolean && (
+          <span className="text-[10px] text-ink-dim font-mono shrink-0 flex items-center gap-2">
+            {hasDefault && (
+              <button
+                type="button"
+                className={`${
+                  isAtDefault ? "text-emerald-400" : "text-accent hover:underline"
+                }`}
+                title={isAtDefault ? "At default" : `Click to reset to default (${def.default})`}
+                onClick={() => { if (!isAtDefault && !disabled) onChange(def.default); }}
+                disabled={disabled || isAtDefault}
+              >
+                {isAtDefault ? <>&#10003; </> : <>&#8617; </>}
+                Default: {String(def.default)}
+              </button>
             )}
+            {hasMin && <span>Min: {String(def.minimum)}</span>}
+            {hasMax && <span>Max: {String(def.maximum)}</span>}
           </span>
         )}
       </div>
