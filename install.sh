@@ -316,22 +316,37 @@ systemctl daemon-reload
 systemctl enable allsky.service
 green "    Updated allsky.service (ExecStart=${ALLSKY_HOME}/allsky.sh)."
 
-# Set up Python venv for Allsky's own modules (flow-runner, etc.).
+# Set up Python venv for Allsky's own modules (flow-runner, overlay, etc.).
 if [[ ! -d "${ALLSKY_HOME}/venv" ]]; then
   cyan "    Creating Allsky Python venv..."
-  # --system-site-packages lets it use system numpy/opencv if available.
   python3 -m venv --system-site-packages "${ALLSKY_HOME}/venv"
-  # Explicitly install setuptools first (missing by default on Python 3.12+).
   "${ALLSKY_HOME}/venv/bin/python3" -m ensurepip --upgrade 2>/dev/null || true
   "${ALLSKY_HOME}/venv/bin/pip" install --quiet --upgrade pip setuptools wheel 2>&1 | tail -1 || true
-  # Install Allsky's Python requirements if they exist.
-  for req in "${ALLSKY_HOME}/config_repo/requirements"*.txt; do
-    if [[ -f "$req" ]]; then
-      cyan "    Installing from $(basename "$req")..."
-      "${ALLSKY_HOME}/venv/bin/pip" install --quiet -r "$req" 2>&1 | tail -3 || true
-    fi
-  done
-  green "    Allsky Python venv created."
+fi
+
+# Always ensure essential overlay module dependencies are installed (PIL, ephem, etc.).
+# These are required for flow-runner.py to render overlays.
+cyan "    Installing overlay module dependencies..."
+"${ALLSKY_HOME}/venv/bin/pip" install --quiet \
+  pillow ephem skyfield astral pytz requests paho-mqtt \
+  2>&1 | tail -3 || yellow "    Some overlay deps may be missing — overlay may not work."
+
+# Install Allsky's Python requirements if they exist (best-effort).
+for req in "${ALLSKY_HOME}/config_repo/requirements"*.txt; do
+  if [[ -f "$req" ]]; then
+    "${ALLSKY_HOME}/venv/bin/pip" install --quiet -r "$req" 2>&1 | tail -1 || true
+  fi
+done
+green "    Allsky Python venv ready."
+
+# Copy overlay config templates if not already in place.
+OVERLAY_SRC="${ALLSKY_HOME}/config_repo/overlay"
+OVERLAY_DST="${ALLSKY_HOME}/config/overlay"
+if [[ -d "${OVERLAY_SRC}" && ! -d "${OVERLAY_DST}/config" ]]; then
+  cyan "    Installing overlay config templates..."
+  mkdir -p "${OVERLAY_DST}"
+  cp -r "${OVERLAY_SRC}"/* "${OVERLAY_DST}/" 2>/dev/null || true
+  green "    Overlay templates installed."
 fi
 
 # Set permissions.

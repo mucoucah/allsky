@@ -245,6 +245,40 @@ export const api = {
     contrast_score: number; message: string;
   }>("/notifications/rain/detect-now", { method: "POST" }),
 
+  // Maintenance: updates, darks, upload tests, generate for day
+  checkUpdate: () => request<{
+    installed: string; latest: string | null;
+    update_available: boolean;
+    web_version: string; web_latest: string | null;
+    web_update_available: boolean;
+    error?: string;
+  }>("/maintenance/check-update"),
+  listDarks: () => request<{
+    darks: Array<{ name: string; size_bytes: number; mtime: number; temperature_c: number | null }>;
+    darks_dir: string; total_bytes: number;
+  }>("/maintenance/darks"),
+  deleteDark: (name: string) =>
+    request<{ deleted: string }>(`/maintenance/darks/${encodeURIComponent(name)}`, { method: "DELETE" }),
+  captureDark: () =>
+    request<{ ok: boolean; message?: string; error?: string }>("/maintenance/darks/capture", { method: "POST" }),
+  testUpload: (cfg: Record<string, unknown>) =>
+    request<{ ok: boolean; exit_code?: number; output?: string; error?: string }>(
+      "/maintenance/upload/test", { method: "POST", json: cfg }),
+  availableDates: () => request<{
+    dates: Array<{ date: string; image_count: number }>;
+  }>("/maintenance/generate/dates"),
+  generateForDate: (date: string, kinds: string[]) =>
+    request<{ ok: boolean; exit_code?: number; output?: string; error?: string; date: string; kinds: string[] }>(
+      `/maintenance/generate/${date}`, { method: "POST", json: { kinds } }),
+  overlayConfig: () => request<{
+    config_dir: string; exists: boolean;
+    fields: Array<{ name: string; label?: string; description?: string }>;
+    configs: string[];
+  }>("/maintenance/overlay/config"),
+  overlayLayout: (name: string) => request<any>(`/maintenance/overlay/layout/${encodeURIComponent(name)}`),
+  saveOverlayLayout: (name: string, body: unknown) =>
+    request<{ ok: boolean }>(`/maintenance/overlay/layout/${encodeURIComponent(name)}`, { method: "PUT", json: body }),
+
   currentFocus: () => request<{
     score: number | null; baseline: number | null; threshold: number | null; status: string;
   }>("/notifications/focus/current"),
