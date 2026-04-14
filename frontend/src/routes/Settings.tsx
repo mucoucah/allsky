@@ -47,16 +47,20 @@ export default function Settings() {
   }, [draft, values]);
   const dirtyCount = Object.keys(dirty).length;
 
-  // Aggregate validation errors so the save button can be disabled.
+  // Aggregate validation errors with tab/section location so users can find them.
   const validationErrors = useMemo(() => {
-    if (!schema) return [] as string[];
-    const errs: string[] = [];
-    for (const sections of Object.values(schema)) {
+    if (!schema) return [] as Array<{ tab: string; label: string; name: string; message: string }>;
+    const errs: Array<{ tab: string; label: string; name: string; message: string }> = [];
+    for (const [tabName, sections] of Object.entries(schema)) {
       for (const defs of Object.values(sections)) {
         for (const def of defs) {
+          // Check ALL dirty fields, not just those in `dirty` — also show errors
+          // for fields that were default but now have invalid values after "Load defaults".
           if (!(def.name in dirty)) continue;
           const e = fieldErrors(def, dirty[def.name]);
-          for (const m of e) errs.push(`${def.label}: ${m}`);
+          for (const m of e) {
+            errs.push({ tab: tabName, label: def.label, name: def.name, message: m });
+          }
         }
       }
     }
@@ -105,25 +109,24 @@ export default function Settings() {
     setMsg(null);
   }
 
-  // Load defaults for all fields that have a default value, into the draft.
+  // Load defaults for fields on the CURRENT TAB that have a default value.
   function loadDefaults() {
-    if (!schema) return;
+    if (!schema || !activeTab) return;
     const next = { ...draft };
     let count = 0;
-    for (const sections of Object.values(schema)) {
-      for (const defs of Object.values(sections)) {
-        for (const def of defs) {
-          const d = def.default;
-          if (d === null || d === undefined || d === "") continue;
-          if (String(next[def.name]) !== String(d)) {
-            next[def.name] = d;
-            count++;
-          }
+    const currentSections = schema[activeTab] ?? {};
+    for (const defs of Object.values(currentSections)) {
+      for (const def of defs) {
+        const d = def.default;
+        if (d === null || d === undefined || d === "") continue;
+        if (String(next[def.name]) !== String(d)) {
+          next[def.name] = d;
+          count++;
         }
       }
     }
     setDraft(next);
-    setMsg(`Loaded defaults for ${count} settings — click Save to apply.`);
+    setMsg(`Loaded defaults for ${count} settings on "${activeTab}" — click Save to apply.`);
   }
 
   if (schemaFailed || valuesFailed) {
@@ -172,12 +175,22 @@ export default function Settings() {
             <span className="text-xs text-accent">{dirtyCount} unsaved</span>
           )}
           {validationErrors.length > 0 && (
-            <span
-              className="text-xs text-err"
-              title={validationErrors.join("\n")}
+            <button
+              onClick={() => {
+                // Jump to the tab of the first error.
+                const first = validationErrors[0];
+                if (first) setTab(first.tab);
+                // Scroll the error field into view.
+                setTimeout(() => {
+                  const el = document.querySelector(`[data-field-name="${first.name}"]`);
+                  el?.scrollIntoView({ behavior: "smooth", block: "center" });
+                }, 100);
+              }}
+              className="text-xs text-err hover:underline"
+              title={validationErrors.map(e => `${e.tab} → ${e.label}: ${e.message}`).join("\n")}
             >
-              {validationErrors.length} error{validationErrors.length === 1 ? "" : "s"}
-            </span>
+              {validationErrors.length} error{validationErrors.length === 1 ? "" : "s"} &rarr;
+            </button>
           )}
           <button
             disabled={save.isPending}
@@ -218,6 +231,34 @@ export default function Settings() {
         </div>
         {msg && <div className="basis-full text-xs text-ink-dim">{msg}</div>}
       </div>
+
+      {/* Error panel (visible when there are validation errors) */}
+      {validationErrors.length > 0 && (
+        <div className="card border border-err/40 bg-err/5">
+          <div className="text-sm font-medium text-err mb-2">
+            {validationErrors.length} validation error{validationErrors.length === 1 ? "" : "s"}:
+          </div>
+          <ul className="text-xs divide-y divide-err/10">
+            {validationErrors.map((e, i) => (
+              <li key={i} className="py-1.5 flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    setTab(e.tab);
+                    setTimeout(() => {
+                      const el = document.querySelector(`[data-field-name="${e.name}"]`);
+                      el?.scrollIntoView({ behavior: "smooth", block: "center" });
+                    }, 100);
+                  }}
+                  className="text-accent hover:underline font-medium"
+                >
+                  {e.tab} &rarr; {e.label}
+                </button>
+                <span className="text-err">{e.message}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {/* Tabs */}
       <div className="card flex flex-wrap gap-1">
