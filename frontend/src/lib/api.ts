@@ -71,6 +71,33 @@ export interface SystemSnapshot {
     os: string;
     python_version: string;
     current_activity?: string;
+    time?: {
+      system_time: string;
+      timezone: string;
+      timezone_name?: string;
+      utc_time: string;
+      unix_timestamp: number;
+      latitude?: number | null;
+      longitude?: number | null;
+      day_night_angle?: number | string;
+      sun_elevation_deg?: number;
+      sun_azimuth_deg?: number;
+      is_day?: boolean;
+      day_night_status?: "DAY" | "NIGHT";
+      next_sunrise_local?: string;
+      next_sunset_local?: string;
+      sun_elevation_note?: string;
+      sun_calc_error?: string;
+      moon?: {
+        elevation_deg: number;
+        azimuth_deg: number;
+        illumination_pct: number;
+        phase_name: string;
+        phase_fraction: number;
+        age_days: number;
+        is_visible: boolean;
+      };
+    };
     network: Array<{
       name: string; is_up: boolean; speed_mbps?: number;
       bytes_sent?: number; bytes_recv?: number;

@@ -6,6 +6,7 @@ import { api, fileUrl } from "../lib/api";
 import { useLiveSocket } from "../hooks/useLiveSocket";
 import { Tile } from "../components/Tile";
 import { StatusPill } from "../components/StatusPill";
+import { SkyCard } from "../components/SkyCard";
 
 function fmtBytes(n: number): string {
   const units = ["B", "KB", "MB", "GB", "TB"];
@@ -135,6 +136,13 @@ export default function Dashboard() {
           )}
         </div>
       </section>
+
+      {/* Sun/Moon card (daytime yellow, nighttime indigo) */}
+      {sys?.host.time && (
+        <div className="lg:col-span-3">
+          <SkyCard time={sys.host.time} />
+        </div>
+      )}
 
       {/* Allsky status card */}
       <section className="card flex flex-col gap-3">
