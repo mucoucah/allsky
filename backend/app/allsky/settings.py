@@ -210,11 +210,36 @@ def validate_patch(patch: dict[str, Any]) -> list[str]:
             continue
 
         if d.type in ("integer",):
-            if not isinstance(value, int) or isinstance(value, bool):
+            if isinstance(value, bool):
+                errors.append(f"{key}: expected integer, got bool")
+                continue
+            if isinstance(value, str):
+                try:
+                    patch[key] = int(value)
+                    value = patch[key]
+                except ValueError:
+                    try:
+                        # Handle "0.0" → 0 for integer fields.
+                        patch[key] = int(float(value))
+                        value = patch[key]
+                    except ValueError:
+                        errors.append(f"{key}: expected integer, got {value!r}")
+                        continue
+            elif not isinstance(value, int):
                 errors.append(f"{key}: expected integer")
                 continue
         if d.type in ("float", "percent"):
-            if not isinstance(value, (int, float)) or isinstance(value, bool):
+            if isinstance(value, bool):
+                errors.append(f"{key}: expected number, got bool")
+                continue
+            if isinstance(value, str):
+                try:
+                    patch[key] = float(value)
+                    value = patch[key]
+                except ValueError:
+                    errors.append(f"{key}: expected number, got {value!r}")
+                    continue
+            elif not isinstance(value, (int, float)):
                 errors.append(f"{key}: expected number")
                 continue
 
