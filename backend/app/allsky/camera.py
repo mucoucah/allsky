@@ -224,6 +224,10 @@ async def setup_initial_config(
         log.info("camera model lookup: sensor=%s -> model=%s", camera_model, full_model)
         camera_model = full_model
 
+    # Default overlay file based on camera type. Without this, allsky_overlay.py
+    # crashes trying to do os.path.join(..., None).
+    overlay_file = f"overlay-{camera_type}.json"
+
     settings.update({
         "cameratype": camera_type,
         "cameramodel": camera_model,
@@ -233,6 +237,8 @@ async def setup_initial_config(
         "latitude": latitude,
         "longitude": longitude,
         "lastchanged": "1",  # Tells allsky.sh that settings have been reviewed.
+        "daytimeoverlay": overlay_file,
+        "nighttimeoverlay": overlay_file,
     })
 
     # Write to both web config and allsky home copies.
