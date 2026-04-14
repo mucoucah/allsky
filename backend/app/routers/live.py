@@ -20,7 +20,15 @@ async def latest_jpg():
     p = paths().latest_image
     if not p.exists():
         return JSONResponse({"error": "no image"}, status_code=404)
-    return FileResponse(p, media_type="image/jpeg")
+    return FileResponse(
+        p,
+        media_type="image/jpeg",
+        headers={
+            "Cache-Control": "no-cache, no-store, must-revalidate, max-age=0",
+            "Pragma": "no-cache",
+            "Expires": "0",
+        },
+    )
 
 
 @router.get("/meta")

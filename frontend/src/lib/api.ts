@@ -324,7 +324,7 @@ export const fileUrl = {
   imageFull: (path: string) => `${base}/images/file?path=${encodeURIComponent(path)}`,
   keogram: (name: string) => `${base}/keograms/keograms/${encodeURIComponent(name)}`,
   startrail: (name: string) => `${base}/keograms/startrails/${encodeURIComponent(name)}`,
-  liveLatest: () => `${base}/live/latest.jpg`,
+  liveLatest: (bust?: number) => `${base}/live/latest.jpg${bust ? `?t=${bust}` : ""}`,
   mask: (name: string) => `${base}/masks/${encodeURIComponent(name)}`,
   video: (name: string) => `${base}/keograms/videos/${encodeURIComponent(name)}`,
 };

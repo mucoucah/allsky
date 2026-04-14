@@ -36,6 +36,13 @@ export default function Dashboard() {
     return () => window.removeEventListener("keydown", onKey);
   }, [fullscreen]);
 
+  // Cache-bust the HTTP fallback image every 5 seconds (when WS not connected).
+  const [bust, setBust] = useState(Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setBust(Date.now()), 5_000);
+    return () => clearInterval(id);
+  }, []);
+
   const serviceAction = useMutation({
     mutationFn: api.serviceControl,
     onSuccess: () => {
@@ -111,7 +118,7 @@ export default function Dashboard() {
             />
           ) : (
             <img
-              src={fileUrl.liveLatest()}
+              src={fileUrl.liveLatest(bust)}
               alt="Latest sky frame (HTTP fallback)"
               className="w-full h-full object-contain opacity-70"
               onError={(e) => ((e.target as HTMLImageElement).style.display = "none")}
@@ -310,7 +317,7 @@ export default function Dashboard() {
             <X size={24} />
           </button>
           <img
-            src={frameUrl || fileUrl.liveLatest()}
+            src={frameUrl || fileUrl.liveLatest(bust)}
             alt="Fullscreen sky view"
             className="max-h-screen max-w-screen object-contain"
           />
