@@ -70,6 +70,7 @@ export interface SystemSnapshot {
     hostname: string;
     os: string;
     python_version: string;
+    current_activity?: string;
     network: Array<{
       name: string; is_up: boolean; speed_mbps?: number;
       bytes_sent?: number; bytes_recv?: number;
@@ -141,6 +142,14 @@ export const api = {
   reboot: () => request<{ ok: boolean; message: string }>("/setup/reboot", { method: "POST" }),
   system: () => request<SystemSnapshot>("/system"),
   allskyDisk: () => request<AllskyDiskUsage>("/system/allsky-disk"),
+  throttleHistory: () => request<{
+    events: Array<{
+      ts: number; types: string[];
+      cpu_temp_c: number | null; cpu_percent: number | null;
+      activity: string;
+    }>;
+  }>("/system/throttle-history"),
+  clearThrottleHistory: () => request<{ ok: boolean }>("/system/throttle-history/clear", { method: "POST" }),
   rebootPi: () => request<{ ok: boolean; message: string }>("/system/reboot", { method: "POST" }),
   shutdownPi: () => request<{ ok: boolean; message: string }>("/system/shutdown", { method: "POST" }),
   messages: () => request<Array<{ type: string; timestamp: string; id: string; message: string }>>(
