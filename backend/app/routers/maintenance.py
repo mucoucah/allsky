@@ -281,6 +281,79 @@ async def generate_for_date(date: str, body: dict = Body(...)):
         return {"ok": False, "error": str(e)}
 
 
+# ── Overlay debug ───────────────────────────────────────────────
+
+@router.get("/overlay/debug")
+async def overlay_debug():
+    """Diagnostic info for why the overlay might not be working."""
+    from app.allsky.settings import load_values
+    p = paths()
+    info: dict[str, Any] = {
+        "allsky_home": str(p.home),
+    }
+
+    # Check overlay method setting.
+    values = load_values()
+    info["overlaymethod"] = values.get("overlaymethod")
+    info["overlaymethod_note"] = "0=legacy, 1=module (needed for overlay editor)"
+
+    # Check venv.
+    venv = p.home / "venv"
+    info["venv_exists"] = _safe_exists(venv)
+    if info["venv_exists"]:
+        # Check for key packages.
+        pip = venv / "bin" / "pip"
+        if _safe_exists(pip):
+            try:
+                proc = await asyncio.create_subprocess_exec(
+                    str(pip), "list", "--format=freeze",
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.DEVNULL,
+                )
+                stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=10)
+                pkgs = {l.split("==")[0].lower(): l.split("==")[1] if "==" in l else ""
+                        for l in stdout.decode(errors="replace").splitlines() if l}
+                info["python_packages"] = {
+                    "pillow": pkgs.get("pillow"),
+                    "ephem": pkgs.get("ephem"),
+                    "skyfield": pkgs.get("skyfield"),
+                    "opencv-python": pkgs.get("opencv-python") or pkgs.get("opencv-python-headless"),
+                    "numpy": pkgs.get("numpy"),
+                }
+            except Exception as e:
+                info["pip_check_error"] = str(e)
+
+    # Check overlay config.
+    overlay_dir = p.config / "overlay"
+    info["overlay_config_dir"] = str(overlay_dir)
+    info["overlay_config_dir_exists"] = _safe_exists(overlay_dir)
+    if info["overlay_config_dir_exists"]:
+        try:
+            info["overlay_config_files"] = [x.name for x in overlay_dir.rglob("*.json") if x.is_file()]
+        except OSError:
+            pass
+
+    # Check modules dir.
+    modules_dir = p.scripts / "modules"
+    info["modules_dir"] = str(modules_dir)
+    info["allsky_overlay_py_exists"] = _safe_exists(modules_dir / "allsky_overlay.py")
+    info["flow_runner_py_exists"] = _safe_exists(p.scripts / "flow-runner.py")
+
+    # Check recent allsky log for overlay errors.
+    log_path = Path("/var/log/allsky.log")
+    if _safe_exists(log_path):
+        try:
+            with log_path.open() as f:
+                lines = f.readlines()[-500:]
+            overlay_lines = [l.strip() for l in lines
+                             if "overlay" in l.lower() or "flow-runner" in l.lower()]
+            info["recent_overlay_log_lines"] = overlay_lines[-20:]
+        except OSError:
+            pass
+
+    return info
+
+
 # ── Overlay configuration ───────────────────────────────────────
 
 @router.get("/overlay/config")
