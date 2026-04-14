@@ -341,15 +341,60 @@ async def overlay_debug():
 
     # Check recent allsky log for overlay errors.
     log_path = Path("/var/log/allsky.log")
+    overlay_lines: list[str] = []
     if _safe_exists(log_path):
         try:
             with log_path.open() as f:
                 lines = f.readlines()[-500:]
             overlay_lines = [l.strip() for l in lines
                              if "overlay" in l.lower() or "flow-runner" in l.lower()]
-            info["recent_overlay_log_lines"] = overlay_lines[-20:]
         except OSError:
             pass
+    # Fallback to journalctl if no /var/log/allsky.log.
+    if not overlay_lines:
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                "journalctl", "-u", "allsky", "--no-pager", "-n", "500",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.DEVNULL,
+            )
+            stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=10)
+            text = stdout.decode(errors="replace")
+            overlay_lines = [
+                l.strip() for l in text.splitlines()
+                if "overlay" in l.lower() or "flow-runner" in l.lower()
+                or "saveimage" in l.lower() or "loadimage" in l.lower()
+                or "module" in l.lower() and ("error" in l.lower() or "fail" in l.lower() or "traceback" in l.lower())
+            ]
+        except Exception as e:
+            info["journalctl_error"] = str(e)
+
+    info["recent_overlay_log_lines"] = overlay_lines[-30:]
+
+    # Check ownership/permissions of the overlay config dir (the service user
+    # needs to be able to read these).
+    try:
+        st = overlay_dir.stat()
+        info["overlay_dir_mode"] = oct(st.st_mode)
+        import pwd
+        try:
+            info["overlay_dir_owner"] = pwd.getpwuid(st.st_uid).pw_name
+        except KeyError:
+            info["overlay_dir_owner"] = str(st.st_uid)
+    except OSError:
+        pass
+
+    # Check if allsky service is actually running.
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "systemctl", "is-active", "allsky.service",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.DEVNULL,
+        )
+        stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=5)
+        info["allsky_service_active"] = stdout.decode(errors="replace").strip()
+    except Exception:
+        pass
 
     return info
 

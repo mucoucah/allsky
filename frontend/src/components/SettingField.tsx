@@ -121,7 +121,7 @@ export function SettingField({ def, value, onChange, disabled, dirty }: Props) {
   const hasMax = def.maximum !== null && def.maximum !== undefined && def.maximum !== "";
 
   return (
-    <div className="py-[3px]">
+    <div className="py-[3px]" data-field-name={def.name}>
       {/* Row 1: Name | Input | Default reset | Min/Max hint */}
       <div className="flex items-center gap-2">
         <label htmlFor={id} className="text-xs shrink-0 w-[180px]">
