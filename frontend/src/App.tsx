@@ -10,6 +10,7 @@ import Alerts from "./routes/Alerts";
 import Notifications from "./routes/Notifications";
 import Setup from "./routes/Setup";
 import System from "./routes/System";
+import Maintenance from "./routes/Maintenance";
 
 export default function App() {
   return (
@@ -25,6 +26,7 @@ export default function App() {
         <Route path="notifications" element={<Notifications />} />
         <Route path="setup" element={<Setup />} />
         <Route path="system" element={<System />} />
+        <Route path="maintenance" element={<Maintenance />} />
       </Route>
     </Routes>
   );

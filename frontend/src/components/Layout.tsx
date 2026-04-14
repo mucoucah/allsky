@@ -2,7 +2,7 @@ import { NavLink, Outlet } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import {
   LayoutDashboard, Image as ImageIcon, Settings as SettingsIcon,
-  Eraser, BarChart3, Film, Bell, Cpu, Radar, Wrench,
+  Eraser, BarChart3, Film, Bell, Cpu, Radar, Wrench, Package,
 } from "lucide-react";
 import { api } from "../lib/api";
 import { LogConsole } from "./LogConsole";
@@ -18,6 +18,7 @@ const links = [
   { to: "/notifications",  label: "Notifications",  Icon: Radar },
   { to: "/setup",          label: "Setup",          Icon: Wrench },
   { to: "/system",         label: "System",         Icon: Cpu },
+  { to: "/maintenance",    label: "Maintenance",    Icon: Package },
 ];
 
 export default function Layout() {
