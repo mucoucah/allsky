@@ -116,9 +116,13 @@ export function SettingField({ def, value, onChange, disabled, dirty }: Props) {
   // Strip HTML tags for plain-text description.
   const plainDesc = def.description ? def.description.replace(/<[^>]*>/g, '').trim() : "";
 
+  // Build the meta text (default / min / max) that goes after the input.
+  const hasMin = def.minimum !== null && def.minimum !== undefined && def.minimum !== "";
+  const hasMax = def.maximum !== null && def.maximum !== undefined && def.maximum !== "";
+
   return (
     <div className="py-[3px]">
-      {/* Row 1: Name | Input | Default */}
+      {/* Row 1: Name | Input | Default reset | Min/Max hint */}
       <div className="flex items-center gap-2">
         <label htmlFor={id} className="text-xs shrink-0 w-[180px]">
           <span className="text-ink">{def.label}</span>
@@ -138,8 +142,20 @@ export function SettingField({ def, value, onChange, disabled, dirty }: Props) {
             onClick={() => { if (!isAtDefault && !disabled) onChange(def.default); }}
             disabled={disabled || isAtDefault}
           >
-            {isAtDefault ? "\u2713" : `\u21ba${def.default}`}
+            {isAtDefault ? "\u2713default" : `\u21ba${def.default}`}
           </button>
+        )}
+        {/* Min/max range hint inline */}
+        {(hasMin || hasMax) && !isBoolean && (
+          <span className="text-[10px] text-ink-dim font-mono shrink-0">
+            {hasMin && hasMax ? (
+              <>[{String(def.minimum)}&ndash;{String(def.maximum)}]</>
+            ) : hasMin ? (
+              <>min {String(def.minimum)}</>
+            ) : (
+              <>max {String(def.maximum)}</>
+            )}
+          </span>
         )}
       </div>
       {/* Row 2: Description (one line) + Errors */}
