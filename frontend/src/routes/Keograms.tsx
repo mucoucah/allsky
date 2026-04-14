@@ -42,6 +42,11 @@ export default function Keograms() {
 
   return (
     <div className="flex flex-col gap-6">
+      <div className="card bg-accent/5 border-accent/20 text-sm">
+        <p className="mb-1"><strong>Keograms</strong> take a vertical slice from the center of every image captured during the night and join them horizontally to show how the sky changed over time. The wider it is, the more images were captured. A narrow keogram means few images.</p>
+        <p><strong>Startrails</strong> stack all night images, keeping the brightest pixel at each point — stars appear as arcs around the celestial pole. Airplane/satellite trails also show up as straight lines.</p>
+        <p className="text-xs text-ink-dim mt-1">These are generated automatically at sunrise (endOfNight.sh). You can re-generate them for a past date from the Maintenance page.</p>
+      </div>
       <Section
         title="Keograms"
         items={keoItems}
