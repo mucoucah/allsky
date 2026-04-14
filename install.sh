@@ -258,6 +258,23 @@ for settings_path in paths:
         if isinstance(cn, int):
             settings['cameranumber'] = str(cn)
             changed = True
+        # Resolve placeholder values in numeric settings.
+        placeholders = {
+            'daymean': 0.5, 'nightmean': 0.3,
+            'daymeanthreshold': 0.1, 'nightmeanthreshold': 0.1,
+            'daymaxautoexposure': 10000, 'nightmaxautoexposure': 60000,
+            'dayexposure': 300000, 'nightexposure': 20000000,
+            'daygain': 1, 'nightgain': 1,
+            'daymaxautogain': 16, 'nightmaxautogain': 16,
+            'daydelay': 10000, 'nightdelay': 10000,
+            'daystretchmidpoint': 10, 'nightstretchmidpoint': 10,
+        }
+        for k, default_val in placeholders.items():
+            v = settings.get(k)
+            if isinstance(v, str) and (v.endswith('_default') or v.startswith('_') or v.endswith('_min') or v.endswith('_max')):
+                settings[k] = default_val
+                changed = True
+                print(f'    Resolved placeholder: {k} = {default_val}')
         if changed:
             with open(settings_path, 'w') as out:
                 json.dump(settings, out, indent=4)
