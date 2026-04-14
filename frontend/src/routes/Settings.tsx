@@ -105,6 +105,27 @@ export default function Settings() {
     setMsg(null);
   }
 
+  // Load defaults for all fields that have a default value, into the draft.
+  function loadDefaults() {
+    if (!schema) return;
+    const next = { ...draft };
+    let count = 0;
+    for (const sections of Object.values(schema)) {
+      for (const defs of Object.values(sections)) {
+        for (const def of defs) {
+          const d = def.default;
+          if (d === null || d === undefined || d === "") continue;
+          if (String(next[def.name]) !== String(d)) {
+            next[def.name] = d;
+            count++;
+          }
+        }
+      }
+    }
+    setDraft(next);
+    setMsg(`Loaded defaults for ${count} settings — click Save to apply.`);
+  }
+
   if (schemaFailed || valuesFailed) {
     return (
       <div className="card text-err">
@@ -158,6 +179,14 @@ export default function Settings() {
               {validationErrors.length} error{validationErrors.length === 1 ? "" : "s"}
             </span>
           )}
+          <button
+            disabled={save.isPending}
+            onClick={loadDefaults}
+            className="px-3 py-1.5 rounded-lg border border-bg-raised text-sm disabled:opacity-50"
+            title="Load default values for all settings"
+          >
+            Load defaults
+          </button>
           <button
             disabled={dirtyCount === 0 || save.isPending}
             onClick={reset}
