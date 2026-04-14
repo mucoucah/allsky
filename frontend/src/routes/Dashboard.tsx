@@ -137,15 +137,10 @@ export default function Dashboard() {
         </div>
       </section>
 
-      {/* Sun/Moon card (daytime yellow, nighttime indigo) */}
-      {sys?.host.time && (
-        <div className="lg:col-span-3">
-          <SkyCard time={sys.host.time} />
-        </div>
-      )}
-
-      {/* Allsky status card */}
-      <section className="card flex flex-col gap-3">
+      {/* Right column: Allsky status + SkyCard stacked */}
+      <div className="flex flex-col gap-4">
+        {/* Allsky status card */}
+        <section className="card flex flex-col gap-3">
         <h2 className="text-lg font-semibold">Allsky</h2>
         {sys ? (
           <>
@@ -201,6 +196,10 @@ export default function Dashboard() {
           <div className="text-ink-dim text-sm">loading…</div>
         )}
       </section>
+
+      {/* Sun/Moon card — compact, below Allsky status */}
+      {sys?.host.time && <SkyCard time={sys.host.time} />}
+      </div>
 
       {/* Throttle alert banner — ACTIVE */}
       {sys?.host.throttle && (
