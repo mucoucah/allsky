@@ -68,7 +68,7 @@ apt-get install -y -qq \
 apt-get install -y -qq \
   libatlas-base-dev libhdf5-dev libopenjp2-7 \
   imagemagick libcamera-apps python3-libcamera \
-  uhubctl \
+  uhubctl ffmpeg \
   2>/dev/null || true
 
 # libtiff varies by Debian version.
