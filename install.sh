@@ -381,6 +381,27 @@ if [[ -n "${REQ_FILE}" ]]; then
 fi
 green "    Allsky Python venv ready."
 
+# Copy module pipeline config — CRITICAL for overlay to work!
+# flow-runner.py reads config/modules/postprocessing_<event>.json to know
+# which modules (loadimage, overlay, saveimage, etc.) to run.
+# Without this file, flow-runner exits early and overlay never renders.
+MODULES_SRC="${ALLSKY_HOME}/config_repo/modules"
+MODULES_DST="${ALLSKY_HOME}/config/modules"
+if [[ -d "${MODULES_SRC}" ]]; then
+  mkdir -p "${MODULES_DST}"
+  # Copy all .json flow configs.
+  for f in "${MODULES_SRC}"/*.json; do
+    if [[ -f "$f" ]]; then
+      dst="${MODULES_DST}/$(basename "$f")"
+      # Only copy if missing (preserve user edits).
+      if [[ ! -f "${dst}" ]]; then
+        cp "$f" "${dst}"
+      fi
+    fi
+  done
+  green "    Module pipeline config installed in config/modules/."
+fi
+
 # Copy overlay config templates if not already in place.
 OVERLAY_SRC="${ALLSKY_HOME}/config_repo/overlay"
 OVERLAY_DST="${ALLSKY_HOME}/config/overlay"
