@@ -43,28 +43,72 @@ based on camera capabilities. Since we don't have that resolver, we provide
 sensible defaults here for the common settings.
 """
 PLACEHOLDER_DEFAULTS: dict[str, Any] = {
-    # Mean exposure target (brightness 0.0-1.0)
+    # ── Mean exposure target (brightness 0.0-1.0) ──
     "daymean": 0.5,
     "nightmean": 0.3,
     "daymeanthreshold": 0.1,
     "nightmeanthreshold": 0.1,
-    # Max auto-exposure in ms
-    "daymaxautoexposure": 10_000,   # 10 sec
-    "nightmaxautoexposure": 60_000,  # 60 sec
-    # Default exposure in us
-    "dayexposure": 300_000,   # 300 ms
-    "nightexposure": 20_000_000,  # 20 sec
-    # Gain
-    "daygain": 1,
-    "nightgain": 1,
+
+    # ── Auto-exposure / auto-gain ──
+    "dayautogain": True,
+    "nightautogain": True,
+    # Max auto-exposure in ms (upstream defaults: day=10s, night=60s)
+    "daymaxautoexposure": 10_000,
+    "nightmaxautoexposure": 60_000,
     "daymaxautogain": 16,
     "nightmaxautogain": 16,
-    # Delay between images (ms)
-    "daydelay": 10000,  # 10 sec
-    "nightdelay": 10000,  # 10 sec
-    # Stretch
+
+    # ── Exposure in us ──
+    "dayexposure": 300_000,        # 300 ms
+    "nightexposure": 20_000_000,   # 20 sec
+
+    # ── Gain ──
+    "daygain": 1,
+    "nightgain": 1,
+
+    # ── Delay between images (ms) ──
+    "daydelay": 10_000,   # 10 sec
+    "nightdelay": 10_000,  # 10 sec
+
+    # ── White balance (RPi typical values) ──
+    "daywbr": 2.5,   # Red channel
+    "daywbb": 2.0,   # Blue channel
+    "nightwbr": 2.5,
+    "nightwbb": 2.0,
+
+    # ── Image processing ──
+    "saturation": 1.0,    # 1.0 = no change
+    "contrast": 0.0,      # 0 = no change
+    "sharpness": 0.0,     # 0 = no sharpening
+    "aggression": 75,     # 75% — auto-exposure aggression
+
+    # ── Gain transition ──
+    "gaintransitiontime": 5,  # 5 minutes
+
+    # ── Cooled camera target temp (ZWO only, most users don't have) ──
+    "daytargettemp": 0,
+    "nighttargettemp": -5,
+
+    # ── USB bandwidth (ZWO only) ──
+    "usb": 40,
+
+    # ── Stretch ──
     "daystretchmidpoint": 10,
     "nightstretchmidpoint": 10,
+
+    # ── Crop (0 = no crop) ──
+    "imagecroptop": 0,
+    "imagecropbottom": 0,
+    "imagecropleft": 0,
+    "imagecropright": 0,
+
+    # ── Resize / timelapse resolution (0 = use native) ──
+    "imageresizeuploadswidth": 0,
+    "imageresizeuploadsheight": 0,
+    "timelapsewidth": 0,
+    "timelapseheight": 0,
+    "minitimelapsewidth": 0,
+    "minitimelapseheight": 0,
 }
 
 # Human-friendly label overrides (upstream is a bit cryptic).
@@ -169,7 +213,15 @@ def load_values() -> dict[str, Any]:
         if d is None:
             continue
         if d.type == "boolean" and isinstance(value, str):
-            raw[key] = value.lower() in ("true", "1", "yes", "on")
+            # Handle placeholder strings (like "_default") as well.
+            if value.startswith("_") or value.endswith("_default"):
+                fallback = PLACEHOLDER_DEFAULTS.get(key)
+                if isinstance(fallback, bool):
+                    raw[key] = fallback
+                else:
+                    raw[key] = True  # safe default
+            else:
+                raw[key] = value.lower() in ("true", "1", "yes", "on")
         elif d.type in ("integer",) and isinstance(value, str):
             try:
                 raw[key] = int(value)

@@ -258,16 +258,26 @@ for settings_path in paths:
         if isinstance(cn, int):
             settings['cameranumber'] = str(cn)
             changed = True
-        # Resolve placeholder values in numeric settings.
+        # Resolve placeholder values in numeric/boolean settings.
         placeholders = {
             'daymean': 0.5, 'nightmean': 0.3,
             'daymeanthreshold': 0.1, 'nightmeanthreshold': 0.1,
+            'dayautogain': True, 'nightautogain': True,
             'daymaxautoexposure': 10000, 'nightmaxautoexposure': 60000,
+            'daymaxautogain': 16, 'nightmaxautogain': 16,
             'dayexposure': 300000, 'nightexposure': 20000000,
             'daygain': 1, 'nightgain': 1,
-            'daymaxautogain': 16, 'nightmaxautogain': 16,
             'daydelay': 10000, 'nightdelay': 10000,
+            'daywbr': 2.5, 'daywbb': 2.0, 'nightwbr': 2.5, 'nightwbb': 2.0,
+            'saturation': 1.0, 'contrast': 0.0, 'sharpness': 0.0,
+            'aggression': 75, 'gaintransitiontime': 5,
+            'daytargettemp': 0, 'nighttargettemp': -5, 'usb': 40,
             'daystretchmidpoint': 10, 'nightstretchmidpoint': 10,
+            'imagecroptop': 0, 'imagecropbottom': 0,
+            'imagecropleft': 0, 'imagecropright': 0,
+            'imageresizeuploadswidth': 0, 'imageresizeuploadsheight': 0,
+            'timelapsewidth': 0, 'timelapseheight': 0,
+            'minitimelapsewidth': 0, 'minitimelapseheight': 0,
         }
         for k, default_val in placeholders.items():
             v = settings.get(k)
