@@ -1,6 +1,73 @@
-import { useId } from "react";
+import { useId, useState, useEffect } from "react";
 import type { SettingDef } from "../lib/api";
 import { fieldErrors } from "../lib/validate";
+
+/** Numeric input that preserves intermediate typing states.
+ *
+ *  The trick: keep a local string state so typing "0." doesn't get lost
+ *  when the parsed number (0) is round-tripped back through the parent.
+ *  We only emit the parsed number through onChange for valid complete
+ *  values — intermediate states like "0." or empty keep the local state
+ *  but also notify the parent with null so the "save" state is clean.
+ */
+function NumericInput({
+  id, value, disabled, isInteger, onChange, cls,
+}: {
+  id: string;
+  value: unknown;
+  disabled?: boolean;
+  isInteger: boolean;
+  onChange: (v: unknown) => void;
+  cls: string;
+}) {
+  const [local, setLocal] = useState<string>(() => (value == null ? "" : String(value)));
+
+  // Sync when parent value changes from outside (e.g. reset to default).
+  useEffect(() => {
+    const parsed = isInteger ? parseInt(local, 10) : parseFloat(local);
+    const incoming = value == null ? "" : String(value);
+    // Only overwrite local if it doesn't already represent the same number.
+    if (!Number.isFinite(parsed) || String(parsed) !== incoming) {
+      setLocal(incoming);
+    }
+  }, [value]);
+
+  const validator = isInteger ? /^-?\d*$/ : /^-?\d*\.?\d*$/;
+
+  return (
+    <input
+      id={id}
+      type="text"
+      inputMode={isInteger ? "numeric" : "decimal"}
+      disabled={disabled}
+      value={local}
+      onChange={(e) => {
+        const raw = e.target.value;
+        if (!validator.test(raw)) return;
+        setLocal(raw);
+        if (raw === "" || raw === "-" || raw === ".") {
+          onChange(null);
+          return;
+        }
+        const n = isInteger ? parseInt(raw, 10) : parseFloat(raw);
+        if (Number.isFinite(n)) {
+          onChange(n);
+        } else {
+          onChange(null);
+        }
+      }}
+      onBlur={() => {
+        // Clean up on blur: if local is invalid or intermediate, either clear
+        // or normalize to a complete number.
+        if (local === "" || local === "-" || local === ".") {
+          setLocal("");
+          onChange(null);
+        }
+      }}
+      className={cls}
+    />
+  );
+}
 
 /** Upstream docs base — rewrites relative /documentation/ links to the
  *  original Allsky GitHub repository wiki/documentation. */
@@ -158,29 +225,17 @@ function renderWidget(
   }
 
   // Numeric inputs — use text input with inputMode for better decimal handling.
+  // We track the raw string locally so intermediate states like "0." or "1." don't
+  // get lost when the parsed number is round-tripped back to the input.
   if (def.type === "integer" || def.type === "float" || def.type === "percent") {
     return (
-      <input
+      <NumericInput
         id={id}
-        type="text"
-        inputMode={def.type === "integer" ? "numeric" : "decimal"}
         disabled={disabled}
-        value={value === undefined || value === null ? "" : String(value)}
-        onChange={(e) => {
-          const raw = e.target.value;
-          if (raw === "" || raw === "-" || raw === ".") return onChange(raw);
-          if (def.type === "integer") {
-            const n = parseInt(raw, 10);
-            onChange(Number.isFinite(n) ? n : raw);
-          } else {
-            // Allow intermediate typing like "1." or "0.5"
-            if (/^-?\d*\.?\d*$/.test(raw)) {
-              const n = parseFloat(raw);
-              onChange(Number.isFinite(n) ? n : raw);
-            }
-          }
-        }}
-        className={cls}
+        value={value}
+        isInteger={def.type === "integer"}
+        onChange={onChange}
+        cls={cls}
       />
     );
   }

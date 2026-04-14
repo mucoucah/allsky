@@ -201,6 +201,12 @@ def validate_patch(patch: dict[str, Any]) -> list[str]:
             # Don't reject unknown settings — upstream may add new ones.
             continue
 
+        # Null/empty: leave field blank, no validation needed.
+        # Upstream uses empty string to mean "use default".
+        if value is None or value == "":
+            patch[key] = ""
+            continue
+
         # Coerce string booleans to real booleans before validation.
         if d.type == "boolean":
             if isinstance(value, str):
