@@ -1,16 +1,144 @@
 """Host (Raspberry Pi) telemetry — CPU temp, disk, uptime, load, network, throttle."""
 from __future__ import annotations
 
+import json
 import platform
 import re
 import subprocess
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 import psutil
 
 from .paths import paths
+
+
+def _time_info() -> dict[str, Any]:
+    """Return system time, timezone, and sun-based day/night info."""
+    now = datetime.now().astimezone()
+    info: dict[str, Any] = {
+        "system_time": now.isoformat(timespec="seconds"),
+        "timezone": str(now.tzinfo),
+        "utc_time": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "unix_timestamp": int(time.time()),
+    }
+    # Timezone name from /etc/timezone if available.
+    try:
+        tz_file = Path("/etc/timezone")
+        if tz_file.exists():
+            info["timezone_name"] = tz_file.read_text().strip()
+    except OSError:
+        pass
+
+    # Read lat/lon and sun angle threshold from settings.
+    try:
+        from .settings import load_values
+        settings = load_values()
+        lat_str = settings.get("latitude", "")
+        lon_str = settings.get("longitude", "")
+        # Allsky accepts "27.8N" / "97.4W" format too.
+        def parse_coord(s: str, neg_letter: str) -> float | None:
+            s = str(s).strip()
+            if not s:
+                return None
+            sign = -1 if s.upper().endswith(neg_letter) else 1
+            s = s.rstrip("NSEWnsew").strip()
+            try:
+                return float(s) * sign
+            except ValueError:
+                return None
+        lat = parse_coord(lat_str, "S")
+        lon = parse_coord(lon_str, "W")
+        info["latitude"] = lat
+        info["longitude"] = lon
+        info["day_night_angle"] = settings.get("angle", -6)
+
+        # Compute sun position using ephem if available.
+        if lat is not None and lon is not None:
+            try:
+                import ephem
+                obs = ephem.Observer()
+                obs.lat = str(lat)
+                obs.lon = str(lon)
+                obs.date = datetime.now(timezone.utc)
+                sun = ephem.Sun()
+                sun.compute(obs)
+                elevation_deg = float(sun.alt) * 180.0 / 3.141592653589793
+                azimuth_deg = float(sun.az) * 180.0 / 3.141592653589793
+                info["sun_elevation_deg"] = round(elevation_deg, 2)
+                info["sun_azimuth_deg"] = round(azimuth_deg, 2)
+
+                # Determine day/night based on angle setting.
+                try:
+                    angle_threshold = float(info["day_night_angle"])
+                except (ValueError, TypeError):
+                    angle_threshold = -6.0
+                info["is_day"] = elevation_deg > angle_threshold
+                info["day_night_status"] = "DAY" if info["is_day"] else "NIGHT"
+
+                # Next sunrise/sunset.
+                try:
+                    obs.horizon = str(angle_threshold)
+                    next_rise = obs.next_rising(sun).datetime().replace(tzinfo=timezone.utc)
+                    next_set = obs.next_setting(sun).datetime().replace(tzinfo=timezone.utc)
+                    info["next_sunrise_utc"] = next_rise.isoformat(timespec="seconds")
+                    info["next_sunset_utc"] = next_set.isoformat(timespec="seconds")
+                    info["next_sunrise_local"] = next_rise.astimezone().isoformat(timespec="seconds")
+                    info["next_sunset_local"] = next_set.astimezone().isoformat(timespec="seconds")
+                except Exception:
+                    pass
+
+                # Moon position, illumination, and phase.
+                try:
+                    obs.horizon = "0"
+                    moon = ephem.Moon()
+                    moon.compute(obs)
+                    moon_elev = float(moon.alt) * 180.0 / 3.141592653589793
+                    moon_az = float(moon.az) * 180.0 / 3.141592653589793
+                    illumination = float(moon.phase)  # 0-100%
+                    # Moon phase name based on age (days since new moon).
+                    next_new = ephem.next_new_moon(obs.date)
+                    prev_new = ephem.previous_new_moon(obs.date)
+                    age_days = float(obs.date - prev_new)
+                    cycle = float(next_new - prev_new)
+                    frac = age_days / cycle if cycle > 0 else 0.0
+                    if frac < 0.03 or frac > 0.97:
+                        phase_name = "New Moon"
+                    elif frac < 0.22:
+                        phase_name = "Waxing Crescent"
+                    elif frac < 0.28:
+                        phase_name = "First Quarter"
+                    elif frac < 0.47:
+                        phase_name = "Waxing Gibbous"
+                    elif frac < 0.53:
+                        phase_name = "Full Moon"
+                    elif frac < 0.72:
+                        phase_name = "Waning Gibbous"
+                    elif frac < 0.78:
+                        phase_name = "Last Quarter"
+                    else:
+                        phase_name = "Waning Crescent"
+                    info["moon"] = {
+                        "elevation_deg": round(moon_elev, 2),
+                        "azimuth_deg": round(moon_az, 2),
+                        "illumination_pct": round(illumination, 1),
+                        "phase_name": phase_name,
+                        "phase_fraction": round(frac, 3),
+                        "age_days": round(age_days, 1),
+                        "is_visible": moon_elev > 0,
+                    }
+                except Exception as e:
+                    info["moon_error"] = str(e)
+            except ImportError:
+                info["sun_elevation_note"] = "Install ephem for sun position"
+            except Exception as e:
+                info["sun_calc_error"] = str(e)
+    except Exception:
+        pass
+
+    return info
 
 
 def _read_thermal_zone() -> float | None:
@@ -212,6 +340,7 @@ def system_snapshot() -> dict[str, Any]:
         "python_version": platform.python_version(),
         "network": _network_info(),
         "throttle": _throttle_status(),
+        "time": _time_info(),
     }
 
 

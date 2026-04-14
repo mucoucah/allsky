@@ -190,6 +190,9 @@ export default function System() {
       {/* Throttle warnings */}
       {h?.throttle && <ThrottleWarnings throttle={h.throttle} />}
 
+      {/* Day/Night status — what Allsky uses to choose settings */}
+      {h?.time && <DayNightSection time={h.time} />}
+
       {/* Throttle event history */}
       <ThrottleHistorySection />
 
@@ -489,6 +492,86 @@ function BarMeter({ label, value, max, unit, detail, thresholds }: {
       </div>
       {detail && (
         <div className="text-[11px] text-ink-dim mt-0.5">{detail}</div>
+      )}
+    </div>
+  );
+}
+
+/* ── Day/Night status ───────────────────────────────────────────── */
+
+function DayNightSection({ time }: { time: NonNullable<import("../lib/api").SystemSnapshot["host"]["time"]> }) {
+  const isDay = time.is_day;
+  return (
+    <div className={`card ${isDay ? "border-amber-500/30" : "border-indigo-500/30"}`}>
+      <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
+        Day/Night Status &mdash;{" "}
+        <span className={isDay ? "text-amber-400" : "text-indigo-300"}>
+          {time.day_night_status || (isDay ? "DAY" : "NIGHT")}
+        </span>
+        <span className="text-xs text-ink-muted font-normal">
+          (Allsky is using {isDay ? "daytime" : "nighttime"} settings)
+        </span>
+      </h3>
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-1 text-xs">
+        <div className="text-ink-muted">System time</div>
+        <div className="font-mono md:col-span-2">
+          {new Date(time.system_time).toLocaleString()}{" "}
+          <span className="text-ink-dim">{time.timezone_name ?? time.timezone}</span>
+        </div>
+        <div className="text-ink-muted">UTC</div>
+        <div className="font-mono md:col-span-2">
+          {new Date(time.utc_time).toUTCString()}
+        </div>
+        {time.latitude !== null && time.longitude !== null && (
+          <>
+            <div className="text-ink-muted">Location</div>
+            <div className="font-mono md:col-span-2">
+              {time.latitude?.toFixed(4)}, {time.longitude?.toFixed(4)}
+            </div>
+          </>
+        )}
+        <div className="text-ink-muted">Sun elevation</div>
+        <div className="font-mono md:col-span-2">
+          {time.sun_elevation_deg?.toFixed(2) ?? "?"}&deg;
+          {time.sun_azimuth_deg !== undefined && (
+            <span className="text-ink-dim"> (az {time.sun_azimuth_deg.toFixed(0)}&deg;)</span>
+          )}
+        </div>
+        <div className="text-ink-muted">Day/night threshold</div>
+        <div className="font-mono md:col-span-2">
+          {String(time.day_night_angle ?? -6)}&deg; sun elevation
+        </div>
+        {time.next_sunrise_local && (
+          <>
+            <div className="text-ink-muted">Next sunrise</div>
+            <div className="font-mono md:col-span-2">
+              {new Date(time.next_sunrise_local).toLocaleString()}
+            </div>
+          </>
+        )}
+        {time.next_sunset_local && (
+          <>
+            <div className="text-ink-muted">Next sunset</div>
+            <div className="font-mono md:col-span-2">
+              {new Date(time.next_sunset_local).toLocaleString()}
+            </div>
+          </>
+        )}
+        {time.moon && (
+          <>
+            <div className="text-ink-muted">Moon phase</div>
+            <div className="font-mono md:col-span-2">
+              {time.moon.phase_name} &mdash; {time.moon.illumination_pct.toFixed(0)}% illuminated
+              {time.moon.is_visible && <span className="text-ink-dim"> (visible, elev {time.moon.elevation_deg.toFixed(0)}&deg;)</span>}
+            </div>
+          </>
+        )}
+      </div>
+      {time.sun_calc_error && (
+        <div className="text-xs text-err mt-2">Sun calc error: {time.sun_calc_error}</div>
+      )}
+      {time.sun_elevation_note && (
+        <div className="text-xs text-warn mt-2">{time.sun_elevation_note}</div>
       )}
     </div>
   );
