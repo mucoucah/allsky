@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Bell, Radar, Focus, Send, Plus, Trash2, TestTube2,
@@ -442,13 +442,28 @@ function NumberField({
   value: number;
   onChange: (v: number) => void;
 }) {
+  const [local, setLocal] = useState(() => String(value ?? ""));
+  useEffect(() => {
+    const parsed = parseFloat(local);
+    if (!Number.isFinite(parsed) || parsed !== value) {
+      setLocal(String(value ?? ""));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value]);
   return (
     <label className="flex flex-col gap-0.5 text-sm">
       <span className="text-ink-muted text-xs">{label}</span>
       <input
-        type="number"
-        value={value}
-        onChange={(e) => onChange(parseFloat(e.target.value))}
+        type="text"
+        inputMode="decimal"
+        value={local}
+        onChange={(e) => {
+          const raw = e.target.value;
+          if (!/^-?\d*\.?\d*$/.test(raw)) return;
+          setLocal(raw);
+          const n = parseFloat(raw);
+          if (Number.isFinite(n)) onChange(n);
+        }}
         className="bg-bg-base border border-bg-raised rounded-lg px-2 py-1 font-mono text-sm w-full"
       />
     </label>
