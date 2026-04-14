@@ -78,10 +78,12 @@ PLACEHOLDER_DEFAULTS: dict[str, Any] = {
     "nightwbb": 2.0,
 
     # ── Image processing ──
-    "saturation": 1.0,    # 1.0 = no change
-    "contrast": 0.0,      # 0 = no change
-    "sharpness": 0.0,     # 0 = no sharpening
-    "aggression": 75,     # 75% — auto-exposure aggression
+    # For rpicam-still/libcamera these are multipliers. 1.0 = normal.
+    # WARNING: contrast=0 gives a COMPLETELY FLAT GRAY IMAGE. Never use 0!
+    "saturation": 1.0,    # 1.0 = normal
+    "contrast": 1.0,      # 1.0 = normal (NOT 0 — that gives gray output!)
+    "sharpness": 1.0,     # 1.0 = normal
+    "aggression": 75,     # auto-exposure aggression %
 
     # ── Gain transition ──
     "gaintransitiontime": 5,  # 5 minutes
@@ -136,8 +138,8 @@ PLACEHOLDER_MINS: dict[str, Any] = {
     "daydelay": 0, "nightdelay": 0,
     # White balance
     "daywbr": 0.0, "daywbb": 0.0, "nightwbr": 0.0, "nightwbb": 0.0,
-    # Image processing
-    "saturation": 0.0, "contrast": -1.0, "sharpness": 0.0,
+    # Image processing (note: 0 contrast = gray image, use carefully)
+    "saturation": 0.0, "contrast": 0.0, "sharpness": 0.0,
     "aggression": 0, "gaintransitiontime": 0,
     # Cooled camera temp
     "daytargettemp": -40, "nighttargettemp": -40,
