@@ -11,6 +11,7 @@ import Notifications from "./routes/Notifications";
 import Setup from "./routes/Setup";
 import System from "./routes/System";
 import Maintenance from "./routes/Maintenance";
+import OverlayEditor from "./routes/OverlayEditor";
 
 export default function App() {
   return (
@@ -27,6 +28,7 @@ export default function App() {
         <Route path="setup" element={<Setup />} />
         <Route path="system" element={<System />} />
         <Route path="maintenance" element={<Maintenance />} />
+        <Route path="overlay" element={<OverlayEditor />} />
       </Route>
     </Routes>
   );
