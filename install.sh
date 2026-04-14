@@ -258,6 +258,18 @@ for settings_path in paths:
         if isinstance(cn, int):
             settings['cameranumber'] = str(cn)
             changed = True
+        # Set overlay filenames if empty — allsky_overlay.py crashes with
+        # None if these aren't set. Pick the right file based on camera_type.
+        ctype = settings.get('cameratype', 'RPi')
+        overlay_file = f'overlay-{ctype}.json'
+        if not settings.get('daytimeoverlay'):
+            settings['daytimeoverlay'] = overlay_file
+            changed = True
+            print(f'    Set daytimeoverlay = {overlay_file}')
+        if not settings.get('nighttimeoverlay'):
+            settings['nighttimeoverlay'] = overlay_file
+            changed = True
+            print(f'    Set nighttimeoverlay = {overlay_file}')
         # Resolve placeholder values in numeric/boolean settings.
         placeholders = {
             'daymean': 0.5, 'nightmean': 0.3,
