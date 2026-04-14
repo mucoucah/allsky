@@ -190,6 +190,9 @@ export default function System() {
       {/* Throttle warnings */}
       {h?.throttle && <ThrottleWarnings throttle={h.throttle} />}
 
+      {/* Throttle event history */}
+      <ThrottleHistorySection />
+
       {/* Allsky storage breakdown */}
       {allskyDisk && <AllskyStorageBreakdown usage={allskyDisk} />}
 
@@ -487,6 +490,72 @@ function BarMeter({ label, value, max, unit, detail, thresholds }: {
       {detail && (
         <div className="text-[11px] text-ink-dim mt-0.5">{detail}</div>
       )}
+    </div>
+  );
+}
+
+/* ── Throttle history ───────────────────────────────────────────── */
+
+function ThrottleHistorySection() {
+  const qc = useQuery({
+    queryKey: ["throttle-history"],
+    queryFn: api.throttleHistory,
+    refetchInterval: 10_000,
+  });
+  const clearMut = useMutation({
+    mutationFn: api.clearThrottleHistory,
+  });
+
+  if (!qc.data) return null;
+  const events = qc.data.events;
+  if (events.length === 0) {
+    return (
+      <div className="card text-xs text-ink-dim">
+        <span className="font-medium text-ink">Throttle event log:</span>
+        {" "}No throttle events recorded since the web service started.
+      </div>
+    );
+  }
+
+  return (
+    <div className="card">
+      <div className="flex items-center justify-between mb-2">
+        <h3 className="text-sm font-semibold flex items-center gap-2">
+          <Zap size={14} className="text-amber-400" />
+          Throttle event log ({events.length})
+        </h3>
+        <button
+          onClick={async () => {
+            await clearMut.mutateAsync();
+            qc.refetch();
+          }}
+          className="text-[10px] text-accent hover:underline"
+        >
+          Clear history
+        </button>
+      </div>
+      <div className="text-xs divide-y divide-bg-raised max-h-60 overflow-auto">
+        {events.map((e, i) => (
+          <div key={i} className="py-1.5 flex flex-wrap items-center gap-x-3 gap-y-1">
+            <span className="text-ink-muted font-mono">
+              {new Date(e.ts * 1000).toLocaleString()}
+            </span>
+            <span className="text-red-400 font-medium">
+              {e.types.map(t => t.replace(/_/g, " ")).join(", ")}
+            </span>
+            {e.cpu_temp_c != null && (
+              <span className="text-ink-muted">{e.cpu_temp_c.toFixed(1)}&deg;C</span>
+            )}
+            {e.cpu_percent != null && (
+              <span className="text-ink-muted">CPU {e.cpu_percent.toFixed(0)}%</span>
+            )}
+            <span className="text-ink-dim italic">while: {e.activity}</span>
+          </div>
+        ))}
+      </div>
+      <p className="text-[10px] text-ink-dim mt-2">
+        History is kept in memory since the web service started. Restarting the service clears it.
+      </p>
     </div>
   );
 }

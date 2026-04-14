@@ -43,6 +43,15 @@ export default function Dashboard() {
     return () => clearInterval(id);
   }, []);
 
+  // Throttle banner dismissal state (stored in sessionStorage).
+  const [throttleDismissed, setThrottleDismissed] = useState<string>(
+    () => sessionStorage.getItem("throttleDismissedTs") || ""
+  );
+  function dismissThrottle(key: string) {
+    sessionStorage.setItem("throttleDismissedTs", key);
+    setThrottleDismissed(key);
+  }
+
   const serviceAction = useMutation({
     mutationFn: api.serviceControl,
     onSuccess: () => {
@@ -185,26 +194,38 @@ export default function Dashboard() {
         )}
       </section>
 
-      {/* Throttle alert banner */}
+      {/* Throttle alert banner — ACTIVE */}
       {sys?.host.throttle && (
         sys.host.throttle.under_voltage_now || sys.host.throttle.throttled_now ||
         sys.host.throttle.freq_capped_now || sys.host.throttle.soft_temp_limit_now
-      ) && (
-        <Link
-          to="/system"
-          className="lg:col-span-3 card border-red-500/50 bg-red-500/10 flex items-center gap-3 hover:bg-red-500/15 transition-colors animate-pulse"
-        >
-          <Zap size={24} className="text-red-400 shrink-0" />
-          <div>
-            <div className="font-semibold text-red-400">Throttling Active</div>
-            <div className="text-sm text-ink-muted flex flex-wrap gap-3">
-              {sys.host.throttle.under_voltage_now && <span>Under-voltage detected — check power supply</span>}
-              {sys.host.throttle.throttled_now && <span>CPU throttled</span>}
-              {sys.host.throttle.freq_capped_now && <span>Frequency capped</span>}
-              {sys.host.throttle.soft_temp_limit_now && <span>Temperature limit ({sys.host.cpu_temp_c?.toFixed(0)}°C)</span>}
+      ) && throttleDismissed !== "active-" + (sys.host as any)?.uptime_seconds && (
+        <div className="lg:col-span-3 card border-red-500/50 bg-red-500/10 animate-pulse">
+          <div className="flex items-start gap-3">
+            <Zap size={24} className="text-red-400 shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <div className="font-semibold text-red-400">Throttling Active</div>
+              <div className="text-sm text-ink-muted flex flex-wrap gap-3 mt-1">
+                {sys.host.throttle.under_voltage_now && <span>&#9889; Under-voltage &mdash; check power supply</span>}
+                {sys.host.throttle.throttled_now && <span>&#9889; CPU throttled</span>}
+                {sys.host.throttle.freq_capped_now && <span>&#9889; Frequency capped</span>}
+                {sys.host.throttle.soft_temp_limit_now && <span>&#127777; Temperature limit</span>}
+              </div>
+              <div className="text-xs text-ink-dim mt-2 flex flex-wrap gap-3">
+                <span>CPU: {sys.host.cpu_temp_c?.toFixed(1) ?? "?"}&deg;C</span>
+                <span>Usage: {sys.host.cpu_percent?.toFixed(0) ?? "?"}%</span>
+                <span>Doing: {(sys.host as any).current_activity ?? "unknown"}</span>
+                <Link to="/system" className="text-accent hover:underline">View history &rarr;</Link>
+              </div>
             </div>
+            <button
+              onClick={() => dismissThrottle("active-" + (sys.host as any)?.uptime_seconds)}
+              className="p-1 text-ink-muted hover:text-ink rounded"
+              title="Dismiss (will reappear if throttling continues)"
+            >
+              <X size={18} />
+            </button>
           </div>
-        </Link>
+        </div>
       )}
 
       {/* Past throttle warning (not active now but occurred since boot) */}
@@ -214,21 +235,28 @@ export default function Dashboard() {
       ) && (
         sys.host.throttle.under_voltage_occurred || sys.host.throttle.throttled_occurred ||
         sys.host.throttle.freq_capped_occurred || sys.host.throttle.soft_temp_limit_occurred
-      ) && (
-        <Link
-          to="/system"
-          className="lg:col-span-3 card border-amber-500/30 bg-amber-500/5 flex items-center gap-3 hover:bg-amber-500/10 transition-colors"
-        >
+      ) && throttleDismissed !== "past-" + (sys.host as any)?.uptime_seconds && (
+        <div className="lg:col-span-3 card border-amber-500/30 bg-amber-500/5 flex items-center gap-3">
           <AlertTriangle size={20} className="text-amber-400 shrink-0" />
-          <div className="text-sm text-amber-400">
-            Throttling occurred since last boot —
+          <div className="text-sm text-amber-400 flex-1">
+            Throttling occurred since last boot &mdash;
             {sys.host.throttle.under_voltage_occurred && " under-voltage"}
             {sys.host.throttle.throttled_occurred && " throttled"}
             {sys.host.throttle.freq_capped_occurred && " freq-capped"}
             {sys.host.throttle.soft_temp_limit_occurred && " temp-limit"}
-            . Click for details.
+            .
+            <Link to="/system" className="text-accent hover:underline ml-1">
+              View history &rarr;
+            </Link>
           </div>
-        </Link>
+          <button
+            onClick={() => dismissThrottle("past-" + (sys.host as any)?.uptime_seconds)}
+            className="p-1 text-ink-muted hover:text-ink rounded"
+            title="Dismiss"
+          >
+            <X size={18} />
+          </button>
+        </div>
       )}
 
       {/* System tiles */}
