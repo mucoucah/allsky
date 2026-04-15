@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { Wrench, Play, Square, Zap, AlertTriangle, CloudRain, X } from "lucide-react";
@@ -85,6 +85,24 @@ export default function Dashboard() {
     staleTime: 60_000,
   });
 
+  // Poll alerts for a recent unacknowledged rain alert.
+  const { data: alerts } = useQuery({
+    queryKey: ["alerts"],
+    queryFn: api.alerts,
+    refetchInterval: 60_000,
+  });
+  const ackAlert = useMutation({
+    mutationFn: api.ackAlert,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["alerts"] }),
+  });
+  const rainAlert = useMemo(() => {
+    if (!alerts) return null;
+    const cutoff = Date.now() / 1000 - 6 * 3600; // last 6 hours
+    return alerts.find(
+      (a) => a.source === "rain" && a.acknowledged_at == null && a.created_at >= cutoff,
+    ) ?? null;
+  }, [alerts]);
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
       {/* Setup banner for fresh installs */}
@@ -102,6 +120,30 @@ export default function Dashboard() {
           </div>
         </Link>
       )}
+      {/* Rain alert banner */}
+      {rainAlert && (
+        <div className="lg:col-span-3 card border-sky-400/40 bg-sky-400/10 flex items-start gap-3">
+          <CloudRain size={24} className="text-sky-300 shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <div className="font-semibold text-sky-300">Rain / moisture detected on dome</div>
+            <div className="text-sm text-ink-muted mt-0.5">{rainAlert.message}</div>
+            <div className="text-xs text-ink-dim mt-1">
+              {new Date(rainAlert.created_at * 1000).toLocaleString()}
+              <Link to="/notifications" className="text-accent hover:underline ml-3">
+                Adjust sensitivity &rarr;
+              </Link>
+            </div>
+          </div>
+          <button
+            onClick={() => ackAlert.mutate(rainAlert.id)}
+            className="p-1 text-ink-muted hover:text-ink rounded"
+            title="Dismiss"
+          >
+            <X size={18} />
+          </button>
+        </div>
+      )}
+
       {/* Live view — spans 2 cols on desktop. */}
       <section className="card lg:col-span-2 flex flex-col gap-3">
         <div className="flex items-center justify-between">
