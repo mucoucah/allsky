@@ -38,11 +38,22 @@ def _list_dir(d: Path, extensions: set[str] = _IMAGE_EXTS) -> list[dict]:
     return out
 
 
-def _aggregate_per_day_subdir(subdir: str, extensions: set[str] = _IMAGE_EXTS) -> list[dict]:
+def _aggregate_per_day_subdir(
+    subdirs: str | list[str],
+    extensions: set[str] = _IMAGE_EXTS,
+    also_in_date_root: bool = False,
+) -> list[dict]:
     """Aggregate files from all per-day directories: images/YYYYMMDD/{subdir}/*.
 
     Also includes files from html/allsky/{subdir}/ (legacy Allsky layout).
+    If ``also_in_date_root`` is True, also collect files directly under
+    ``images/YYYYMMDD/`` that match ``extensions`` (this is where upstream
+    ``generateForDay.sh`` drops ``allsky-YYYYMMDD.mp4`` timelapse videos).
     """
+    if isinstance(subdirs, str):
+        subdir_list = [subdirs]
+    else:
+        subdir_list = list(subdirs)
     out: list[dict] = []
     seen_paths: set[str] = set()
 
@@ -55,71 +66,99 @@ def _aggregate_per_day_subdir(subdir: str, extensions: set[str] = _IMAGE_EXTS) -
                     continue
                 if not re.match(r"^\d{8}$", date_dir.name):
                     continue
-                sub = date_dir / subdir
-                if not sub.exists():
-                    continue
-                try:
-                    for p in sorted(sub.iterdir(), reverse=True):
-                        if not p.is_file():
-                            continue
-                        if p.suffix.lower() not in extensions:
-                            continue
-                        full = str(p)
-                        if full in seen_paths:
-                            continue
-                        seen_paths.add(full)
-                        try:
-                            st = p.stat()
-                        except OSError:
-                            continue
-                        out.append({
-                            "name": p.name,
-                            "size_bytes": st.st_size,
-                            "mtime": int(st.st_mtime),
-                            "date_dir": date_dir.name,  # so we can serve from right dir
-                        })
-                except OSError:
-                    continue
+                # Collect from each candidate subdirectory name.
+                for subdir in subdir_list:
+                    sub = date_dir / subdir
+                    if not sub.exists():
+                        continue
+                    try:
+                        for p in sorted(sub.iterdir(), reverse=True):
+                            if not p.is_file():
+                                continue
+                            if p.suffix.lower() not in extensions:
+                                continue
+                            full = str(p)
+                            if full in seen_paths:
+                                continue
+                            seen_paths.add(full)
+                            try:
+                                st = p.stat()
+                            except OSError:
+                                continue
+                            out.append({
+                                "name": p.name,
+                                "size_bytes": st.st_size,
+                                "mtime": int(st.st_mtime),
+                                "date_dir": date_dir.name,
+                            })
+                    except OSError:
+                        continue
+                # Also look directly in the date dir (for timelapse videos).
+                if also_in_date_root:
+                    try:
+                        for p in sorted(date_dir.iterdir(), reverse=True):
+                            if not p.is_file():
+                                continue
+                            if p.suffix.lower() not in extensions:
+                                continue
+                            full = str(p)
+                            if full in seen_paths:
+                                continue
+                            seen_paths.add(full)
+                            try:
+                                st = p.stat()
+                            except OSError:
+                                continue
+                            out.append({
+                                "name": p.name,
+                                "size_bytes": st.st_size,
+                                "mtime": int(st.st_mtime),
+                                "date_dir": date_dir.name,
+                            })
+                    except OSError:
+                        pass
     except OSError:
         pass
 
-    # Fallback: html/allsky/{subdir}/ (legacy)
-    legacy_dir = getattr(paths(), f"{subdir}_dir", None)
-    if legacy_dir is None:
-        # keograms/startrails/videos
+    # Fallback: html/allsky/{subdir}/ (legacy layout)
+    for subdir in subdir_list:
         legacy_dir = paths().html / "allsky" / subdir
-    try:
-        if legacy_dir.exists():
-            for p in sorted(legacy_dir.iterdir(), reverse=True):
-                if not p.is_file():
-                    continue
-                if p.suffix.lower() not in extensions:
-                    continue
-                full = str(p)
-                if full in seen_paths:
-                    continue
-                seen_paths.add(full)
-                try:
-                    st = p.stat()
-                except OSError:
-                    continue
-                out.append({
-                    "name": p.name,
-                    "size_bytes": st.st_size,
-                    "mtime": int(st.st_mtime),
-                })
-    except OSError:
-        pass
+        try:
+            if legacy_dir.exists():
+                for p in sorted(legacy_dir.iterdir(), reverse=True):
+                    if not p.is_file():
+                        continue
+                    if p.suffix.lower() not in extensions:
+                        continue
+                    full = str(p)
+                    if full in seen_paths:
+                        continue
+                    seen_paths.add(full)
+                    try:
+                        st = p.stat()
+                    except OSError:
+                        continue
+                    out.append({
+                        "name": p.name,
+                        "size_bytes": st.st_size,
+                        "mtime": int(st.st_mtime),
+                    })
+        except OSError:
+            pass
 
     # Sort all by mtime desc.
     out.sort(key=lambda x: x["mtime"], reverse=True)
     return out
 
 
-def _find_file(subdir: str, name: str) -> Path | None:
+def _find_file(subdirs: str | list[str], name: str, also_in_date_root: bool = False) -> Path | None:
     """Locate a file by name in any of the expected locations."""
     if "/" in name or ".." in name:
         return None
+    if isinstance(subdirs, str):
+        subdir_list = [subdirs]
+    else:
+        subdir_list = list(subdirs)
     # Try per-day dirs.
     try:
         images_root = paths().images
@@ -127,31 +166,46 @@ def _find_file(subdir: str, name: str) -> Path | None:
             for date_dir in images_root.iterdir():
                 if not date_dir.is_dir():
                     continue
-                candidate = date_dir / subdir / name
-                if candidate.is_file():
-                    return candidate
+                for subdir in subdir_list:
+                    candidate = date_dir / subdir / name
+                    if candidate.is_file():
+                        return candidate
+                if also_in_date_root:
+                    candidate = date_dir / name
+                    if candidate.is_file():
+                        return candidate
     except OSError:
         pass
     # Fallback: html/allsky/{subdir}/{name}
-    try:
-        legacy = paths().html / "allsky" / subdir / name
-        if legacy.is_file():
-            return legacy
-    except OSError:
-        pass
+    for subdir in subdir_list:
+        try:
+            legacy = paths().html / "allsky" / subdir / name
+            if legacy.is_file():
+                return legacy
+        except OSError:
+            pass
     return None
+
+
+# Upstream generateForDay.sh writes to {date}/keogram/ (singular), but some
+# setups / legacy installs use 'keograms' (plural). Accept both.
+_KEOGRAM_SUBDIRS = ["keogram", "keograms"]
+_STARTRAIL_SUBDIRS = ["startrails", "startrail"]
+# Timelapse videos are written directly to images/YYYYMMDD/allsky-YYYYMMDD.mp4
+# by upstream — no subdirectory. Some setups may use images/YYYYMMDD/videos/.
+_VIDEO_SUBDIRS = ["videos", "video"]
 
 
 # ── Keograms ────────────────────────────────────────────────────
 
 @router.get("/keograms")
 async def keograms():
-    return {"items": _aggregate_per_day_subdir("keograms")}
+    return {"items": _aggregate_per_day_subdir(_KEOGRAM_SUBDIRS)}
 
 
 @router.get("/keograms/{name}")
 async def keogram_file(name: str):
-    p = _find_file("keograms", name)
+    p = _find_file(_KEOGRAM_SUBDIRS, name)
     if not p:
         raise HTTPException(404, "not found")
     return FileResponse(p)
@@ -161,12 +215,12 @@ async def keogram_file(name: str):
 
 @router.get("/startrails")
 async def startrails():
-    return {"items": _aggregate_per_day_subdir("startrails")}
+    return {"items": _aggregate_per_day_subdir(_STARTRAIL_SUBDIRS)}
 
 
 @router.get("/startrails/{name}")
 async def startrail_file(name: str):
-    p = _find_file("startrails", name)
+    p = _find_file(_STARTRAIL_SUBDIRS, name)
     if not p:
         raise HTTPException(404, "not found")
     return FileResponse(p)
@@ -186,7 +240,9 @@ async def videos(
     sort: str = Query("date", description="Sort by: date, name, size"),
     order: str = Query("desc", description="Sort order: asc or desc"),
 ):
-    items = _aggregate_per_day_subdir("videos", extensions=_VIDEO_EXTS)
+    items = _aggregate_per_day_subdir(
+        _VIDEO_SUBDIRS, extensions=_VIDEO_EXTS, also_in_date_root=True,
+    )
 
     # Enrich with extracted date
     for item in items:
@@ -208,7 +264,9 @@ async def videos(
         items.sort(key=lambda i: i["mtime"], reverse=reverse)
 
     # Collect unique dates for the date picker
-    all_items = _aggregate_per_day_subdir("videos", extensions=_VIDEO_EXTS)
+    all_items = _aggregate_per_day_subdir(
+        _VIDEO_SUBDIRS, extensions=_VIDEO_EXTS, also_in_date_root=True,
+    )
     dates_set: set[str] = set()
     for i in all_items:
         d = i.get("date_dir")
@@ -224,7 +282,7 @@ async def videos(
 
 @router.get("/videos/{name}")
 async def video_file(name: str):
-    p = _find_file("videos", name)
+    p = _find_file(_VIDEO_SUBDIRS, name, also_in_date_root=True)
     if not p:
         raise HTTPException(404, "not found")
     return FileResponse(p, media_type="video/mp4")
