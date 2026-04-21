@@ -482,7 +482,7 @@ green "    ${SERVICE_USER} added to groups: ${REAL_GROUP}, video, systemd-journa
 # ── Step 4: Python backend ──────────────────────────────────────
 
 cyan "==> [4/6] Installing Python web backend"
-mkdir -p "${INSTALL_PREFIX}"
+mkdir -p "${INSTALL_PREFIX}/backend"
 # Clean copy backend source (remove old first to avoid cp -r nesting).
 rm -rf "${INSTALL_PREFIX}/backend/app" "${INSTALL_PREFIX}/backend/pyproject.toml"
 cp -r "${SCRIPT_DIR}/backend/app" "${INSTALL_PREFIX}/backend/app"
