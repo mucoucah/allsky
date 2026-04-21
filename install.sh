@@ -22,7 +22,7 @@ INSTALL_PREFIX="/opt/allsky-web"
 DATA_DIR="/var/lib/allsky-web"
 SERVICE_USER="allskyweb"
 ENV_FILE="/etc/allsky-web/env"
-NODE_MIN_MAJOR=18
+NODE_MIN_MAJOR=20
 
 cyan()  { printf "\033[36m%s\033[0m\n" "$*"; }
 green() { printf "\033[32m%s\033[0m\n" "$*"; }
