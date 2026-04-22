@@ -292,6 +292,17 @@ export const api = {
     aircraft: AircraftInfo[]; timestamp: number; count: number;
   }>("/notifications/adsb/scan-now", { method: "POST" }),
 
+  // Satellite tracking
+  satConfig: () => request<SatConfig>("/notifications/satellites/config"),
+  setSatConfig: (cfg: Partial<SatConfig>) =>
+    request<{ ok: boolean }>("/notifications/satellites/config", { method: "PUT", json: cfg }),
+  satPasses: () => request<{
+    passes: SatPass[]; overhead: SatPosition[]; timestamp: number;
+  }>("/notifications/satellites/passes"),
+  satScanNow: () => request<{
+    passes: SatPass[]; overhead: SatPosition[]; timestamp: number;
+  }>("/notifications/satellites/scan-now", { method: "POST" }),
+
   // Maintenance: updates, darks, upload tests, generate for day
   checkUpdate: () => request<{
     installed: string; latest: string | null;
@@ -397,6 +408,55 @@ export interface AircraftInfo {
   distance_km: number;
   bearing_deg: number;
   elevation_deg: number;
+  geo_altitude_m: number | null;
+  position_source: string;
+  category: string;
+  spi: boolean;
+  last_contact_age: number;
+  registration: string;
+  aircraft_type: string;
+  operator: string;
+}
+
+export interface SatConfig {
+  enabled: boolean;
+  poll_interval_minutes: number;
+  tle_groups: string[];
+  hours_ahead: number;
+  min_elevation_deg: number;
+  alert_triggers: string[];
+  alert_min_elevation_deg: number;
+  alert_minutes_before: number;
+  alert_cooldown_minutes: number;
+  include_snapshot: boolean;
+}
+
+export interface SatPass {
+  name: string;
+  norad_id: string;
+  rise_time: string;
+  rise_az_deg: number;
+  culmination_time: string;
+  max_elev_deg: number;
+  set_time: string;
+  set_az_deg: number;
+  duration_sec: number;
+  is_visible: boolean;
+  group: string;
+}
+
+export interface SatPosition {
+  name: string;
+  norad_id: string;
+  lat: number;
+  lon: number;
+  altitude_km: number;
+  velocity_kms: number;
+  elevation_deg: number;
+  azimuth_deg: number;
+  range_km: number;
+  is_sunlit: boolean;
+  group: string;
 }
 
 export const fileUrl = {
