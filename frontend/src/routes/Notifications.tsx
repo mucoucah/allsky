@@ -4,6 +4,7 @@ import {
   Bell, Radar, Focus, Send, Plus, Trash2, TestTube2, Plane,
 } from "lucide-react";
 import { api, type NotifChannel, type AircraftInfo } from "../lib/api";
+import { callsignLookup } from "../lib/callsigns";
 
 export default function Notifications() {
   return (
@@ -547,23 +548,6 @@ function RainSection() {
 
 // ── ADS-B Aircraft Tracking ───────────────────────────────────
 
-function airlineFromCallsign(callsign: string): string | null {
-  const prefix = callsign.slice(0, 3).toUpperCase();
-  const airlines: Record<string, string> = {
-    AAL: "American", UAL: "United", DAL: "Delta", SWA: "Southwest",
-    JBU: "JetBlue", ASA: "Alaska", NKS: "Spirit", FFT: "Frontier",
-    SKW: "SkyWest", RPA: "Republic", ENY: "Envoy", BAW: "British Airways",
-    DLH: "Lufthansa", AFR: "Air France", KLM: "KLM", EZY: "easyJet",
-    RYR: "Ryanair", UAE: "Emirates", QTR: "Qatar", SIA: "Singapore",
-    ANA: "ANA", JAL: "JAL", CPA: "Cathay Pacific", QFA: "Qantas",
-    THY: "Turkish", TAP: "TAP", IBE: "Iberia", ACA: "Air Canada",
-    AZA: "ITA Airways", CSN: "China Southern", CCA: "Air China",
-    CES: "China Eastern", EVA: "EVA Air", CAL: "China Airlines",
-    KAL: "Korean Air", AAR: "Asiana", FDX: "FedEx", UPS: "UPS",
-  };
-  return airlines[prefix] ?? null;
-}
-
 function fmtAlt(m: number | null): string {
   if (m == null) return "—";
   const ft = Math.round(m * 3.281);
@@ -780,7 +764,7 @@ function AdsbSection() {
                           )}
                         </td>
                         <td className="py-1.5 pr-3 text-ink-muted">
-                          {ac.callsign ? airlineFromCallsign(ac.callsign) ?? "" : ""}
+                          {ac.callsign ? callsignLookup(ac.callsign) ?? "" : ""}
                         </td>
                         <td className="py-1.5 pr-3 text-right font-mono">{fmtAlt(ac.altitude_m)}</td>
                         <td className="py-1.5 pr-3 text-right font-mono">{fmtSpeed(ac.velocity_mps)}</td>
