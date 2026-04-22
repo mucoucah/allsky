@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import logging
 import math
+import time
 from dataclasses import dataclass, asdict
 
 import httpx
@@ -44,6 +45,16 @@ class Aircraft:
     distance_km: float
     bearing_deg: float
     elevation_deg: float
+    # Enriched fields from state vector
+    geo_altitude_m: float | None = None
+    position_source: str = ""
+    category: str = ""
+    spi: bool = False
+    last_contact_age: int = 0
+    # Enriched from metadata API (filled async by watcher)
+    registration: str = ""
+    aircraft_type: str = ""
+    operator: str = ""
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -142,6 +153,56 @@ def _fmt_alt(m: float | None) -> str:
     if m is None:
         return "unknown alt"
     return f"{round(m * 3.281):,} ft"
+
+
+_CATEGORY_MAP = {
+    0: "", 1: "No info", 2: "Light (<15.5k lbs)", 3: "Medium (15.5k-75k lbs)",
+    4: "Heavy (>75k lbs)", 5: "High vortex", 6: "Very heavy (>300k lbs)",
+    7: "Rotorcraft", 8: "Glider/sailplane", 9: "Lighter-than-air",
+    10: "Skydiver", 11: "Paraglider/hang-glider", 12: "Reserved",
+    13: "UAV/drone", 14: "Space vehicle", 15: "Emergency vehicle",
+    16: "Service vehicle", 17: "Obstruction",
+}
+
+_POSITION_SOURCE_MAP = {0: "ADS-B", 1: "MLAT", 2: "Other", 3: "FLARM"}
+
+_metadata_cache: dict[str, tuple[float, dict]] = {}  # icao24 -> (timestamp, data)
+_METADATA_TTL = 86400  # 24 hours
+
+
+async def fetch_metadata(
+    icao24: str, username: str = "", password: str = "",
+) -> dict | None:
+    """Fetch aircraft metadata (type, registration, operator) from OpenSky."""
+    now = time.time()
+    cached = _metadata_cache.get(icao24)
+    if cached and now - cached[0] < _METADATA_TTL:
+        return cached[1]
+
+    url = f"https://opensky-network.org/api/metadata/aircraft/icao/{icao24}"
+    auth = (username, password) if username and password else None
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.get(url, auth=auth)
+            if resp.status_code == 404:
+                _metadata_cache[icao24] = (now, {})
+                return {}
+            if resp.status_code == 429:
+                return None
+            resp.raise_for_status()
+            data = resp.json()
+            result = {
+                "registration": (data.get("registration") or "").strip(),
+                "aircraft_type": (data.get("typecode") or "").strip(),
+                "operator": (data.get("operatorCallsign") or data.get("owner") or "").strip(),
+                "model": (data.get("model") or "").strip(),
+                "manufacturer": (data.get("manufacturerName") or "").strip(),
+            }
+            _metadata_cache[icao24] = (now, result)
+            return result
+    except Exception as e:
+        log.debug("metadata fetch failed for %s: %s", icao24, e)
+        return None
 
 
 def _haversine(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -244,6 +305,11 @@ async def fetch_nearby(
         if dist > radius_km:
             continue
 
+        now_ts = data.get("time", time.time())
+        last_contact = s[4] if len(s) > 4 and s[4] else now_ts
+        cat_code = s[17] if len(s) > 17 and s[17] is not None else 0
+        pos_src = s[16] if len(s) > 16 and s[16] is not None else 0
+
         ac = Aircraft(
             icao24=str(s[0] or "").strip(),
             callsign=str(s[1] or "").strip(),
@@ -259,6 +325,11 @@ async def fetch_nearby(
             distance_km=round(dist, 1),
             bearing_deg=round(_bearing(lat, lon, ac_lat, ac_lon), 1),
             elevation_deg=round(_elevation_angle(dist, altitude), 1),
+            geo_altitude_m=s[13] if len(s) > 13 else None,
+            position_source=_POSITION_SOURCE_MAP.get(pos_src, ""),
+            category=_CATEGORY_MAP.get(cat_code, ""),
+            spi=bool(s[15]) if len(s) > 15 else False,
+            last_contact_age=max(0, int(now_ts - last_contact)),
         )
         aircraft.append(ac)
 

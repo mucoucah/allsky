@@ -23,9 +23,10 @@ from app.db import connect, insert_alert
 from .channels import Attachment, dispatch
 from .focus import assess_focus
 from .meteor import detect as detect_meteor
-from .adsb import Aircraft, RateLimitError, evaluate_triggers, fetch_nearby, is_emergency, min_poll_seconds
+from .adsb import Aircraft, RateLimitError, evaluate_triggers, fetch_metadata, fetch_nearby, is_emergency, min_poll_seconds
 from .rain import detect_rain
-from .store import load_adsb_config, load_channels, load_comet_config, load_focus_config, load_rain_config
+from .satellites import compute_passes, current_positions, download_tles
+from .store import load_adsb_config, load_channels, load_comet_config, load_focus_config, load_rain_config, load_sat_config
 
 log = logging.getLogger(__name__)
 
@@ -344,6 +345,19 @@ async def adsb_watcher(stop: asyncio.Event) -> None:
                 await _sleep(stop, max(cfg.get("poll_interval_seconds", 30), min_interval))
                 continue
 
+            # Enrich one aircraft per cycle with metadata (rate-limit friendly).
+            if aircraft:
+                _adsb_meta_idx = getattr(adsb_watcher, '_meta_idx', 0)
+                target = aircraft[_adsb_meta_idx % len(aircraft)]
+                meta = await fetch_metadata(target.icao24, uname, passwd)
+                if meta:
+                    target.registration = meta.get("registration", "")
+                    target.aircraft_type = meta.get("aircraft_type", "")
+                    if not target.aircraft_type and meta.get("model"):
+                        target.aircraft_type = meta["model"]
+                    target.operator = meta.get("operator", "")
+                adsb_watcher._meta_idx = _adsb_meta_idx + 1
+
             _adsb_cache["aircraft"] = [ac.to_dict() for ac in aircraft]
             _adsb_cache["timestamp"] = time.time()
             _adsb_cache["count"] = len(aircraft)
@@ -381,6 +395,135 @@ async def adsb_watcher(stop: asyncio.Event) -> None:
             await _sleep(stop, 60)
 
     log.info("adsb_watcher: stopped")
+
+
+# ── satellite watcher ──────────────────────────────────────────
+
+_sat_cache: dict = {"passes": [], "overhead": [], "timestamp": 0}
+_sat_alert_times: dict[str, float] = {}
+
+_SAT_TRIGGER_LABELS = {
+    "iss": "ISS",
+    "all_visible": "any visible satellite",
+    "bright_passes": "bright passes (>45° elevation)",
+    "starlink": "Starlink satellite",
+    "space_station": "any space station",
+}
+
+
+def get_sat_cache() -> dict:
+    return dict(_sat_cache)
+
+
+def set_sat_cache(data: dict) -> None:
+    _sat_cache.update(data)
+
+
+async def satellite_watcher(stop: asyncio.Event) -> None:
+    """Compute upcoming satellite passes and alert before interesting ones."""
+    log.info("satellite_watcher: starting")
+
+    while not stop.is_set():
+        try:
+            cfg = load_sat_config()
+            if not cfg.get("enabled"):
+                _sat_cache.update({"passes": [], "overhead": [], "timestamp": 0})
+                await _sleep(stop, 30)
+                continue
+
+            latlon = _get_camera_latlon()
+            if latlon is None:
+                await _sleep(stop, 60)
+                continue
+            lat, lon = latlon
+
+            groups = cfg.get("tle_groups", ["stations", "visual"])
+            try:
+                tles = await download_tles(groups)
+            except Exception as e:
+                log.warning("satellite_watcher: TLE download failed: %s", e)
+                await _sleep(stop, cfg.get("poll_interval_minutes", 15) * 60)
+                continue
+
+            hours = cfg.get("hours_ahead", 24)
+            min_elev = cfg.get("min_elevation_deg", 10)
+            passes = compute_passes(lat, lon, 0, tles, hours, min_elev)
+            overhead = current_positions(lat, lon, 0, tles, min_elevation_deg=0)
+
+            _sat_cache["passes"] = [p.to_dict() for p in passes[:50]]
+            _sat_cache["overhead"] = [s.to_dict() for s in overhead]
+            _sat_cache["timestamp"] = time.time()
+
+            # Check alert triggers.
+            triggers = cfg.get("alert_triggers", [])
+            cooldown = cfg.get("alert_cooldown_minutes", 60) * 60
+            alert_min_elev = cfg.get("alert_min_elevation_deg", 20)
+            alert_before = cfg.get("alert_minutes_before", 5)
+            now = time.time()
+
+            for p in passes:
+                if not p.is_visible:
+                    continue
+                if p.max_elev_deg < alert_min_elev:
+                    continue
+                try:
+                    from datetime import datetime
+                    rise_dt = datetime.fromisoformat(p.rise_time)
+                    minutes_until = (rise_dt.timestamp() - now) / 60
+                    if minutes_until < 0 or minutes_until > alert_before:
+                        continue
+                except Exception:
+                    continue
+
+                should_alert = False
+                name_lower = p.name.lower()
+
+                if "iss" in triggers and "iss" in name_lower:
+                    should_alert = True
+                if "space_station" in triggers and ("iss" in name_lower or "tiangong" in name_lower or "css" in name_lower):
+                    should_alert = True
+                if "starlink" in triggers and "starlink" in name_lower:
+                    should_alert = True
+                if "bright_passes" in triggers and p.max_elev_deg >= 45:
+                    should_alert = True
+                if "all_visible" in triggers:
+                    should_alert = True
+
+                if not should_alert:
+                    continue
+
+                dedup_key = f"sat-{p.norad_id}-{p.rise_time[:13]}"
+                last = _sat_alert_times.get(dedup_key, 0)
+                if now - last < cooldown:
+                    continue
+                today = date.today().isoformat()
+                if await _already_alerted(dedup_key, today):
+                    continue
+                await _record_alert(dedup_key, today)
+                _sat_alert_times[dedup_key] = now
+
+                msg = (
+                    f"{p.name} pass in {int(minutes_until)} min — "
+                    f"max {p.max_elev_deg}° elev, "
+                    f"{p.duration_sec}s duration, "
+                    f"rise {p.rise_time[11:16]} UTC"
+                )
+                await insert_alert("info", "satellite", msg)
+                channels = load_channels()
+                atts = _build_attachments(cfg.get("include_snapshot", True), False)
+                await dispatch(channels, f"Satellite: {p.name} pass soon", msg, atts)
+                log.info("satellite_watcher: alert — %s", msg)
+
+            poll = cfg.get("poll_interval_minutes", 15)
+            await _sleep(stop, poll * 60)
+
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            log.exception("satellite_watcher: error")
+            await _sleep(stop, 120)
+
+    log.info("satellite_watcher: stopped")
 
 
 # ── dedup helpers ────────────────────────────────────────────────

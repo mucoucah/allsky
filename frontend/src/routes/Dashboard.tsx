@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import { Wrench, Play, Square, Zap, AlertTriangle, CloudRain, Plane, X } from "lucide-react";
+import { Wrench, Play, Square, Zap, AlertTriangle, CloudRain, Plane, Satellite, X } from "lucide-react";
 import { api, fileUrl } from "../lib/api";
 import { useLiveSocket } from "../hooks/useLiveSocket";
 import { Tile } from "../components/Tile";
@@ -118,6 +118,22 @@ export default function Dashboard() {
     queryFn: api.adsbNearby,
     refetchInterval: 15_000,
   });
+
+  const { data: satData } = useQuery({
+    queryKey: ["satPasses"],
+    queryFn: api.satPasses,
+    refetchInterval: 60_000,
+  });
+
+  const satAlert = useMemo(() => {
+    if (!alerts) return null;
+    const cutoff = Date.now() / 1000 - 6 * 3600;
+    return alerts.find(
+      (a) => a.source === "satellite" && a.acknowledged_at == null && a.created_at >= cutoff,
+    ) ?? null;
+  }, [alerts]);
+
+  const nextPass = satData?.passes?.[0] ?? null;
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -268,15 +284,18 @@ export default function Dashboard() {
           </div>
           <div className="flex flex-col gap-1">
             {adsb.aircraft.slice(0, 5).map((ac) => {
-              const airline = ac.callsign ? callsignLookup(ac.callsign) : null;
+              const label = ac.operator || (ac.callsign ? callsignLookup(ac.callsign) : null);
               return (
                 <div key={ac.icao24} className="flex items-center justify-between text-xs">
                   <div className="flex items-center gap-1.5 min-w-0">
                     <span className="font-mono font-medium truncate">
                       {ac.callsign || ac.icao24}
                     </span>
-                    {airline && (
-                      <span className="text-ink-dim truncate">{airline}</span>
+                    {ac.aircraft_type && (
+                      <span className="text-accent text-[10px]">{ac.aircraft_type}</span>
+                    )}
+                    {label && (
+                      <span className="text-ink-dim truncate">{label}</span>
                     )}
                   </div>
                   <div className="flex items-center gap-2 text-ink-muted shrink-0 ml-2">
@@ -294,7 +313,58 @@ export default function Dashboard() {
           )}
         </section>
       )}
+
+      {/* Next satellite pass — compact card */}
+      {nextPass && (
+        <section className="card p-3 flex flex-col gap-2">
+          <div className="flex items-center gap-2">
+            <Satellite size={16} className="text-accent" />
+            <span className="text-sm font-semibold">Next satellite pass</span>
+          </div>
+          <div className="flex items-center justify-between text-xs">
+            <span className="font-mono font-medium">{nextPass.name}</span>
+            <span className={nextPass.is_visible ? "text-emerald-400" : "text-ink-dim"}>
+              {nextPass.is_visible ? "☀ Visible" : "In shadow"}
+            </span>
+          </div>
+          <div className="grid grid-cols-3 gap-1 text-xs text-ink-muted">
+            <div>
+              <div className="text-[10px] text-ink-dim">Rise</div>
+              <div className="font-mono">{nextPass.rise_time ? new Date(nextPass.rise_time).toLocaleTimeString([], {hour: "2-digit", minute: "2-digit"}) : "—"}</div>
+            </div>
+            <div className="text-center">
+              <div className="text-[10px] text-ink-dim">Max elev</div>
+              <div className="font-mono">{nextPass.max_elev_deg}°</div>
+            </div>
+            <div className="text-right">
+              <div className="text-[10px] text-ink-dim">Duration</div>
+              <div className="font-mono">{nextPass.duration_sec}s</div>
+            </div>
+          </div>
+        </section>
+      )}
       </div>
+
+      {/* Satellite pass alert banner */}
+      {satAlert && (
+        <div className="lg:col-span-3 card border-violet-400/40 bg-violet-400/10 flex items-start gap-3">
+          <Satellite size={24} className="text-violet-300 shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <div className="font-semibold text-violet-300">Satellite pass alert</div>
+            <div className="text-sm text-ink-muted mt-0.5">{satAlert.message}</div>
+            <div className="text-xs text-ink-dim mt-1">
+              {new Date(satAlert.created_at * 1000).toLocaleString()}
+            </div>
+          </div>
+          <button
+            onClick={() => ackAlert.mutate(satAlert.id)}
+            className="p-1 text-ink-muted hover:text-ink rounded"
+            title="Dismiss"
+          >
+            <X size={18} />
+          </button>
+        </div>
+      )}
 
       {/* ADS-B emergency alert banner */}
       {adsbAlert && (

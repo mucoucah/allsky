@@ -185,3 +185,27 @@ def load_adsb_config() -> dict:
 
 def save_adsb_config(cfg: dict) -> None:
     _save("adsb_config.json", cfg)
+
+
+# ── satellite config ────────────────────────────────────────────
+
+_DEFAULT_SAT_CFG: dict = {
+    "enabled": False,
+    "poll_interval_minutes": 15,
+    "tle_groups": ["stations", "visual"],
+    "hours_ahead": 24,
+    "min_elevation_deg": 10,
+    "alert_triggers": ["iss"],
+    "alert_min_elevation_deg": 20,
+    "alert_minutes_before": 5,
+    "alert_cooldown_minutes": 60,
+    "include_snapshot": True,
+}
+
+
+def load_sat_config() -> dict:
+    return _load("sat_config.json", {**_DEFAULT_SAT_CFG})
+
+
+def save_sat_config(cfg: dict) -> None:
+    _save("sat_config.json", cfg)
