@@ -35,3 +35,7 @@
   .pill-warn  { @apply text-warn  border-warn/30 bg-warn/10; }
   .pill-err   { @apply text-err   border-err/30 bg-err/10; }
 }
+
+/* Hide scrollbar but keep scroll functionality (mobile bottom nav) */
+.scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+.scrollbar-hide::-webkit-scrollbar { display: none; }

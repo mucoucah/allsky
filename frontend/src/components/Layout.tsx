@@ -67,23 +67,25 @@ export default function Layout() {
         </main>
       </div>
 
-      {/* Bottom nav (mobile) */}
-      <nav className="md:hidden fixed bottom-0 inset-x-0 z-30 bg-bg-panel/95 border-t border-bg-raised flex items-center justify-around py-2">
-        {links.slice(0, 6).map(({ to, label, Icon }) => (
-          <NavLink
-            key={to}
-            to={to}
-            end={to === "/"}
-            className={({ isActive }) =>
-              `flex flex-col items-center gap-0.5 px-2 py-1 rounded-lg ${
-                isActive ? "text-accent" : "text-ink-muted"
-              }`
-            }
-          >
-            <Icon size={20} />
-            <span className="text-[10px]">{label}</span>
-          </NavLink>
-        ))}
+      {/* Bottom nav (mobile) — horizontally scrollable */}
+      <nav className="md:hidden fixed bottom-0 inset-x-0 z-30 bg-bg-panel/95 border-t border-bg-raised overflow-x-auto scrollbar-hide">
+        <div className="flex items-center gap-1 px-2 py-2 min-w-max">
+          {links.map(({ to, label, Icon }) => (
+            <NavLink
+              key={to}
+              to={to}
+              end={to === "/"}
+              className={({ isActive }) =>
+                `flex flex-col items-center gap-0.5 px-3 py-1 rounded-lg shrink-0 ${
+                  isActive ? "text-accent" : "text-ink-muted"
+                }`
+              }
+            >
+              <Icon size={20} />
+              <span className="text-[10px]">{label}</span>
+            </NavLink>
+          ))}
+        </div>
       </nav>
 
       {/* Floating log console — available on every page */}
