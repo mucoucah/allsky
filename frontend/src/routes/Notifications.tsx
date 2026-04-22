@@ -618,9 +618,12 @@ function AdsbSection() {
             onChange={(v) => update.mutate({ radius_km: v })}
           />
           <NumberField
-            label="Poll interval (seconds)"
+            label={`Poll interval (sec) — min ${cfg.opensky_username ? "3" : "6"}`}
             value={cfg.poll_interval_seconds}
-            onChange={(v) => update.mutate({ poll_interval_seconds: Math.max(v, 6) })}
+            onChange={(v) => {
+              const min = cfg.opensky_username ? 3 : 6;
+              update.mutate({ poll_interval_seconds: Math.max(v, min) });
+            }}
           />
           <NumberField
             label="Min altitude (m)"
