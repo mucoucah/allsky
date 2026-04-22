@@ -634,15 +634,61 @@ function AdsbSection() {
           />
         </div>
 
-        <div className="flex flex-wrap gap-4">
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={cfg.alert_on_emergency_squawk}
-              onChange={(e) => update.mutate({ alert_on_emergency_squawk: e.target.checked })}
+        {/* Alert triggers */}
+        <div className="border-t border-bg-raised pt-3 mt-1">
+          <p className="text-xs text-ink-muted mb-2 font-medium">Alert triggers</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {([
+              ["emergency_squawk", "Emergency squawk", "7500 hijack, 7600 radio failure, 7700 emergency"],
+              ["all_flights", "All flights", "Any aircraft within radius"],
+              ["low_altitude", "Low-altitude flights", `Below ${cfg.alert_low_altitude_ft ?? 3000} ft`],
+              ["slow_mover", "Slow / hovering", `Below ${cfg.alert_slow_speed_kts ?? 100} kts — helicopters, drones`],
+              ["no_callsign", "No-callsign flights", "Often military or government aircraft"],
+            ] as const).map(([key, label, hint]) => {
+              const triggers = cfg.alert_triggers ?? [];
+              const checked = triggers.includes(key);
+              return (
+                <label key={key} className="flex items-start gap-2 text-sm p-2 rounded-lg bg-bg-base border border-bg-raised hover:border-accent/30 transition-colors cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={() => {
+                      const next = checked
+                        ? triggers.filter((t: string) => t !== key)
+                        : [...triggers, key];
+                      update.mutate({ alert_triggers: next });
+                    }}
+                    className="mt-0.5"
+                  />
+                  <div>
+                    <div className="font-medium">{label}</div>
+                    <div className="text-xs text-ink-dim">{hint}</div>
+                  </div>
+                </label>
+              );
+            })}
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3">
+            <NumberField
+              label="Low altitude threshold (ft)"
+              value={cfg.alert_low_altitude_ft}
+              onChange={(v) => update.mutate({ alert_low_altitude_ft: v })}
             />
-            Alert on emergency squawk
-          </label>
+            <NumberField
+              label="Slow speed threshold (kts)"
+              value={cfg.alert_slow_speed_kts}
+              onChange={(v) => update.mutate({ alert_slow_speed_kts: v })}
+            />
+            <NumberField
+              label="Alert cooldown (min)"
+              value={cfg.alert_cooldown_minutes}
+              onChange={(v) => update.mutate({ alert_cooldown_minutes: Math.max(v, 1) })}
+            />
+          </div>
+        </div>
+
+        {/* Display options */}
+        <div className="flex flex-wrap gap-4">
           <label className="flex items-center gap-2 text-sm">
             <input
               type="checkbox"

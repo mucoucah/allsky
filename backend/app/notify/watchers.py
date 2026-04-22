@@ -23,7 +23,7 @@ from app.db import connect, insert_alert
 from .channels import Attachment, dispatch
 from .focus import assess_focus
 from .meteor import detect as detect_meteor
-from .adsb import Aircraft, fetch_nearby, is_emergency
+from .adsb import Aircraft, evaluate_triggers, fetch_nearby, is_emergency
 from .rain import detect_rain
 from .store import load_adsb_config, load_channels, load_comet_config, load_focus_config, load_rain_config
 
@@ -263,6 +263,7 @@ async def rain_watcher(stop: asyncio.Event) -> None:
 # ── ADS-B watcher ──────────────────────────────────────────────
 
 _adsb_cache: dict = {"aircraft": [], "timestamp": 0, "count": 0}
+_adsb_alert_times: dict[str, float] = {}
 
 
 def get_adsb_cache() -> dict:
@@ -339,26 +340,28 @@ async def adsb_watcher(stop: asyncio.Event) -> None:
             _adsb_cache["timestamp"] = time.time()
             _adsb_cache["count"] = len(aircraft)
 
-            if cfg.get("alert_on_emergency_squawk", True):
+            triggers = cfg.get("alert_triggers", [])
+            cooldown = cfg.get("alert_cooldown_minutes", 30) * 60
+            now = time.time()
+            if triggers:
                 for ac in aircraft:
-                    emergency = is_emergency(ac)
-                    if not emergency:
-                        continue
-                    dedup_key = f"adsb-{ac.icao24}"
-                    today = date.today().isoformat()
-                    if await _already_alerted(dedup_key, today):
-                        continue
-                    await _record_alert(dedup_key, today)
-                    msg = (
-                        f"Emergency squawk {ac.squawk} ({emergency}) — "
-                        f"{ac.callsign or ac.icao24} at {ac.altitude_m or '?'}m, "
-                        f"{ac.distance_km}km away"
-                    )
-                    await insert_alert("warning", "adsb", msg)
-                    channels = load_channels()
-                    atts = _build_attachments(cfg.get("include_snapshot", True), False)
-                    await dispatch(channels, f"ADS-B: {emergency} — {ac.callsign or ac.icao24}", msg, atts)
-                    log.info("adsb_watcher: emergency alert — %s", msg)
+                    matched = evaluate_triggers(ac, triggers, cfg)
+                    for trig in matched:
+                        last = _adsb_alert_times.get(trig.dedup_key, 0)
+                        if now - last < cooldown:
+                            continue
+                        today = date.today().isoformat()
+                        if await _already_alerted(trig.dedup_key, today):
+                            continue
+                        await _record_alert(trig.dedup_key, today)
+                        _adsb_alert_times[trig.dedup_key] = now
+                        level = "warning" if trig.kind == "emergency_squawk" else "info"
+                        await insert_alert(level, "adsb", trig.message)
+                        channels = load_channels()
+                        atts = _build_attachments(cfg.get("include_snapshot", True), False)
+                        subject = f"ADS-B [{trig.kind}]: {ac.callsign or ac.icao24}"
+                        await dispatch(channels, subject, trig.message, atts)
+                        log.info("adsb_watcher: %s — %s", trig.kind, trig.message)
 
             poll = cfg.get("poll_interval_seconds", 30)
             await _sleep(stop, max(poll, 6))
