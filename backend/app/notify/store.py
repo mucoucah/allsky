@@ -158,3 +158,28 @@ def load_rain_config() -> dict:
 
 def save_rain_config(cfg: dict) -> None:
     _save("rain_config.json", cfg)
+
+
+# ── ADS-B config ────────────────────────────────────────────────
+
+_DEFAULT_ADSB_CFG: dict = {
+    "enabled": False,
+    "poll_interval_seconds": 30,
+    "radius_km": 50,
+    "min_altitude_m": 0,
+    "alert_on_emergency_squawk": True,
+    "alert_min_elevation_deg": 0,
+    "show_on_overlay": True,
+    "overlay_max_aircraft": 5,
+    "opensky_username": "",
+    "opensky_password": "",
+    "include_snapshot": True,
+}
+
+
+def load_adsb_config() -> dict:
+    return _load("adsb_config.json", {**_DEFAULT_ADSB_CFG})
+
+
+def save_adsb_config(cfg: dict) -> None:
+    _save("adsb_config.json", cfg)

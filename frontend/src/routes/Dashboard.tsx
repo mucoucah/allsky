@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import { Wrench, Play, Square, Zap, AlertTriangle, CloudRain, X } from "lucide-react";
+import { Wrench, Play, Square, Zap, AlertTriangle, CloudRain, Plane, X } from "lucide-react";
 import { api, fileUrl } from "../lib/api";
 import { useLiveSocket } from "../hooks/useLiveSocket";
 import { Tile } from "../components/Tile";
@@ -22,6 +22,17 @@ function fmtUptime(s: number): string {
   if (d) return `${d}d ${h}h`;
   if (h) return `${h}h ${m}m`;
   return `${m}m`;
+}
+
+const _AIRLINES: Record<string, string> = {
+  AAL: "American", UAL: "United", DAL: "Delta", SWA: "Southwest",
+  JBU: "JetBlue", ASA: "Alaska", BAW: "British Airways", DLH: "Lufthansa",
+  AFR: "Air France", KLM: "KLM", RYR: "Ryanair", UAE: "Emirates",
+  QTR: "Qatar", SIA: "Singapore", FDX: "FedEx", UPS: "UPS",
+  ACA: "Air Canada", THY: "Turkish", QFA: "Qantas",
+};
+function _airlinePrefix(cs: string): string | null {
+  return _AIRLINES[cs.slice(0, 3).toUpperCase()] ?? null;
 }
 
 export default function Dashboard() {
@@ -97,11 +108,25 @@ export default function Dashboard() {
   });
   const rainAlert = useMemo(() => {
     if (!alerts) return null;
-    const cutoff = Date.now() / 1000 - 6 * 3600; // last 6 hours
+    const cutoff = Date.now() / 1000 - 6 * 3600;
     return alerts.find(
       (a) => a.source === "rain" && a.acknowledged_at == null && a.created_at >= cutoff,
     ) ?? null;
   }, [alerts]);
+
+  const adsbAlert = useMemo(() => {
+    if (!alerts) return null;
+    const cutoff = Date.now() / 1000 - 6 * 3600;
+    return alerts.find(
+      (a) => a.source === "adsb" && a.acknowledged_at == null && a.created_at >= cutoff,
+    ) ?? null;
+  }, [alerts]);
+
+  const { data: adsb } = useQuery({
+    queryKey: ["adsbNearby"],
+    queryFn: api.adsbNearby,
+    refetchInterval: 15_000,
+  });
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -241,7 +266,65 @@ export default function Dashboard() {
 
       {/* Sun/Moon card — compact, below Allsky status */}
       {sys?.host.time && <SkyCard time={sys.host.time} />}
+
+      {/* Aircraft nearby — compact card */}
+      {adsb && adsb.count > 0 && (
+        <section className="card p-3 flex flex-col gap-2">
+          <div className="flex items-center gap-2">
+            <Plane size={16} className="text-accent" />
+            <span className="text-sm font-semibold">Aircraft nearby</span>
+            <span className="text-xs text-ink-dim ml-auto">{adsb.count}</span>
+          </div>
+          <div className="flex flex-col gap-1">
+            {adsb.aircraft.slice(0, 5).map((ac) => {
+              const airline = ac.callsign ? _airlinePrefix(ac.callsign) : null;
+              return (
+                <div key={ac.icao24} className="flex items-center justify-between text-xs">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <span className="font-mono font-medium truncate">
+                      {ac.callsign || ac.icao24}
+                    </span>
+                    {airline && (
+                      <span className="text-ink-dim truncate">{airline}</span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 text-ink-muted shrink-0 ml-2">
+                    <span>{ac.altitude_m != null ? `${Math.round(ac.altitude_m * 3.281).toLocaleString()} ft` : "—"}</span>
+                    <span>{ac.distance_km} km</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          {adsb.timestamp > 0 && (
+            <div className="text-[10px] text-ink-dim">
+              Updated {new Date(adsb.timestamp * 1000).toLocaleTimeString()}
+            </div>
+          )}
+        </section>
+      )}
       </div>
+
+      {/* ADS-B emergency alert banner */}
+      {adsbAlert && (
+        <div className="lg:col-span-3 card border-red-400/40 bg-red-400/10 flex items-start gap-3">
+          <Plane size={24} className="text-red-300 shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <div className="font-semibold text-red-300">Aircraft emergency alert</div>
+            <div className="text-sm text-ink-muted mt-0.5">{adsbAlert.message}</div>
+            <div className="text-xs text-ink-dim mt-1">
+              {new Date(adsbAlert.created_at * 1000).toLocaleString()}
+            </div>
+          </div>
+          <button
+            onClick={() => ackAlert.mutate(adsbAlert.id)}
+            className="p-1 text-ink-muted hover:text-ink rounded"
+            title="Dismiss"
+          >
+            <X size={18} />
+          </button>
+        </div>
+      )}
 
       {/* Throttle alert banner — ACTIVE */}
       {sys?.host.throttle && (

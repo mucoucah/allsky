@@ -1,9 +1,9 @@
 import { useState, useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  Bell, Radar, Focus, Send, Plus, Trash2, TestTube2,
+  Bell, Radar, Focus, Send, Plus, Trash2, TestTube2, Plane,
 } from "lucide-react";
-import { api, type NotifChannel } from "../lib/api";
+import { api, type NotifChannel, type AircraftInfo } from "../lib/api";
 
 export default function Notifications() {
   return (
@@ -13,6 +13,7 @@ export default function Notifications() {
       <MeteorSection />
       <FocusSection />
       <RainSection />
+      <AdsbSection />
     </div>
   );
 }
@@ -536,6 +537,216 @@ function RainSection() {
             {detect.data.rain_detected
               ? `Rain detected! Confidence: ${(detect.data.confidence * 100).toFixed(0)}% — ${detect.data.message}`
               : `Clear — confidence: ${(detect.data.confidence * 100).toFixed(0)}%, ${detect.data.message}`}
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+
+// ── ADS-B Aircraft Tracking ───────────────────────────────────
+
+function airlineFromCallsign(callsign: string): string | null {
+  const prefix = callsign.slice(0, 3).toUpperCase();
+  const airlines: Record<string, string> = {
+    AAL: "American", UAL: "United", DAL: "Delta", SWA: "Southwest",
+    JBU: "JetBlue", ASA: "Alaska", NKS: "Spirit", FFT: "Frontier",
+    SKW: "SkyWest", RPA: "Republic", ENY: "Envoy", BAW: "British Airways",
+    DLH: "Lufthansa", AFR: "Air France", KLM: "KLM", EZY: "easyJet",
+    RYR: "Ryanair", UAE: "Emirates", QTR: "Qatar", SIA: "Singapore",
+    ANA: "ANA", JAL: "JAL", CPA: "Cathay Pacific", QFA: "Qantas",
+    THY: "Turkish", TAP: "TAP", IBE: "Iberia", ACA: "Air Canada",
+    AZA: "ITA Airways", CSN: "China Southern", CCA: "Air China",
+    CES: "China Eastern", EVA: "EVA Air", CAL: "China Airlines",
+    KAL: "Korean Air", AAR: "Asiana", FDX: "FedEx", UPS: "UPS",
+  };
+  return airlines[prefix] ?? null;
+}
+
+function fmtAlt(m: number | null): string {
+  if (m == null) return "—";
+  const ft = Math.round(m * 3.281);
+  return `${ft.toLocaleString()} ft`;
+}
+
+function fmtSpeed(mps: number | null): string {
+  if (mps == null) return "—";
+  return `${Math.round(mps * 1.944)} kts`;
+}
+
+function bearingLabel(deg: number): string {
+  const dirs = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
+  return dirs[Math.round(deg / 45) % 8];
+}
+
+function AdsbSection() {
+  const qc = useQueryClient();
+  const { data: cfg } = useQuery({ queryKey: ["adsbCfg"], queryFn: api.adsbConfig });
+  const update = useMutation({
+    mutationFn: api.setAdsbConfig,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["adsbCfg"] }),
+  });
+  const scan = useMutation({ mutationFn: api.adsbScanNow });
+
+  if (!cfg) return null;
+
+  return (
+    <section className="card">
+      <h2 className="text-lg font-semibold flex items-center gap-2 mb-3">
+        <Plane size={20} className="text-accent" />
+        ADS-B Aircraft Tracking
+      </h2>
+      <p className="text-xs text-ink-dim mb-3">
+        Tracks aircraft near your camera using the OpenSky Network API. Shows nearby flights on the Dashboard
+        and alerts on emergency squawk codes (7500/7600/7700). No hardware required — data is pulled from the internet.
+      </p>
+      <div className="flex flex-col gap-3">
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={cfg.enabled}
+            onChange={(e) => update.mutate({ enabled: e.target.checked })}
+          />
+          Enable aircraft tracking
+        </label>
+
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <NumberField
+            label="Radius (km)"
+            value={cfg.radius_km}
+            onChange={(v) => update.mutate({ radius_km: v })}
+          />
+          <NumberField
+            label="Poll interval (seconds)"
+            value={cfg.poll_interval_seconds}
+            onChange={(v) => update.mutate({ poll_interval_seconds: Math.max(v, 6) })}
+          />
+          <NumberField
+            label="Min altitude (m)"
+            value={cfg.min_altitude_m}
+            onChange={(v) => update.mutate({ min_altitude_m: v })}
+          />
+          <NumberField
+            label="Max on overlay"
+            value={cfg.overlay_max_aircraft}
+            onChange={(v) => update.mutate({ overlay_max_aircraft: v })}
+          />
+        </div>
+
+        <div className="flex flex-wrap gap-4">
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={cfg.alert_on_emergency_squawk}
+              onChange={(e) => update.mutate({ alert_on_emergency_squawk: e.target.checked })}
+            />
+            Alert on emergency squawk
+          </label>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={cfg.show_on_overlay}
+              onChange={(e) => update.mutate({ show_on_overlay: e.target.checked })}
+            />
+            Show on image overlay
+          </label>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={cfg.include_snapshot}
+              onChange={(e) => update.mutate({ include_snapshot: e.target.checked })}
+            />
+            Include snapshot in alerts
+          </label>
+        </div>
+
+        <div className="border-t border-bg-raised pt-3 mt-1">
+          <p className="text-xs text-ink-dim mb-2">
+            <strong>OpenSky credentials</strong> (optional — anonymous: ~10 req/min, registered: ~100 req/min).
+            Register free at opensky-network.org.
+          </p>
+          <div className="grid grid-cols-2 gap-3">
+            <label className="flex flex-col gap-0.5 text-sm">
+              <span className="text-ink-muted text-xs">Username</span>
+              <input
+                type="text"
+                value={cfg.opensky_username}
+                onChange={(e) => update.mutate({ opensky_username: e.target.value })}
+                placeholder="(anonymous)"
+                className="bg-bg-base border border-bg-raised rounded-lg px-2 py-1 font-mono text-sm"
+              />
+            </label>
+            <label className="flex flex-col gap-0.5 text-sm">
+              <span className="text-ink-muted text-xs">Password</span>
+              <input
+                type="password"
+                value={cfg.opensky_password}
+                onChange={(e) => update.mutate({ opensky_password: e.target.value })}
+                placeholder="****"
+                className="bg-bg-base border border-bg-raised rounded-lg px-2 py-1 font-mono text-sm"
+              />
+            </label>
+          </div>
+        </div>
+
+        <div className="flex gap-2">
+          <button
+            onClick={() => scan.mutate()}
+            disabled={scan.isPending}
+            className="px-3 py-1.5 rounded-lg border border-bg-raised text-sm inline-flex items-center gap-1.5"
+          >
+            <Radar size={14} />
+            {scan.isPending ? "Scanning..." : "Scan now"}
+          </button>
+        </div>
+
+        {scan.isSuccess && scan.data && (
+          <div className="bg-bg-base rounded-lg border border-bg-raised p-3">
+            <div className="text-sm font-medium mb-2">
+              {scan.data.count} aircraft found
+            </div>
+            {scan.data.count > 0 && (
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="text-ink-muted border-b border-bg-raised">
+                      <th className="text-left py-1 pr-3">Callsign</th>
+                      <th className="text-left py-1 pr-3">Airline</th>
+                      <th className="text-right py-1 pr-3">Altitude</th>
+                      <th className="text-right py-1 pr-3">Speed</th>
+                      <th className="text-right py-1 pr-3">Distance</th>
+                      <th className="text-right py-1 pr-3">Bearing</th>
+                      <th className="text-right py-1 pr-3">Elev</th>
+                      <th className="text-left py-1">Country</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {scan.data.aircraft.map((ac) => (
+                      <tr key={ac.icao24} className="border-b border-bg-raised/50 hover:bg-bg-raised/30">
+                        <td className="py-1.5 pr-3 font-mono font-medium">
+                          {ac.callsign || ac.icao24}
+                          {ac.squawk && ["7500", "7600", "7700"].includes(ac.squawk) && (
+                            <span className="ml-1 text-red-400 font-bold">SQ{ac.squawk}</span>
+                          )}
+                        </td>
+                        <td className="py-1.5 pr-3 text-ink-muted">
+                          {ac.callsign ? airlineFromCallsign(ac.callsign) ?? "" : ""}
+                        </td>
+                        <td className="py-1.5 pr-3 text-right font-mono">{fmtAlt(ac.altitude_m)}</td>
+                        <td className="py-1.5 pr-3 text-right font-mono">{fmtSpeed(ac.velocity_mps)}</td>
+                        <td className="py-1.5 pr-3 text-right font-mono">{ac.distance_km} km</td>
+                        <td className="py-1.5 pr-3 text-right font-mono">
+                          {ac.bearing_deg}° {bearingLabel(ac.bearing_deg)}
+                        </td>
+                        <td className="py-1.5 pr-3 text-right font-mono">{ac.elevation_deg}°</td>
+                        <td className="py-1.5 text-ink-muted">{ac.origin_country}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         )}
       </div>
