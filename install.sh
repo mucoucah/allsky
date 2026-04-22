@@ -318,7 +318,7 @@ fi
 
 # Create initial settings.json if missing (first install).
 if [[ ! -f "${ALLSKY_HOME}/config/settings.json" ]]; then
-  echo '{"cameratype":"RPi","cameramodel":"","cameranumber":"0","filename":"image.jpg","debuglevel":"1","lastchanged":"1"}' \
+  echo '{"cameratype":"RPi","cameramodel":"","cameranumber":"0","filename":"image.jpg","debuglevel":"1","lastchanged":"1","daytimeoverlay":"overlay-RPi.json","nighttimeoverlay":"overlay-RPi.json","contrast":1.0,"sharpness":1.0,"saturation":1.0}' \
     > "${ALLSKY_HOME}/config/settings.json"
   green "    Created initial settings."
 fi
