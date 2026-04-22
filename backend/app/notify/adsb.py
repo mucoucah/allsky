@@ -52,6 +52,88 @@ def is_emergency(ac: Aircraft) -> str | None:
     return None
 
 
+@dataclass
+class AlertTrigger:
+    kind: str  # "emergency_squawk", "all_flights", "low_altitude", "slow_mover", "no_callsign"
+    dedup_key: str
+    message: str
+
+
+def evaluate_triggers(ac: Aircraft, triggers: list[str], cfg: dict) -> list[AlertTrigger]:
+    """Check which alert triggers an aircraft matches. Returns list of matched triggers."""
+    matched: list[AlertTrigger] = []
+
+    if "emergency_squawk" in triggers:
+        em = is_emergency(ac)
+        if em:
+            matched.append(AlertTrigger(
+                kind="emergency_squawk",
+                dedup_key=f"adsb-emerg-{ac.icao24}",
+                message=(
+                    f"Emergency squawk {ac.squawk} ({em}) — "
+                    f"{ac.callsign or ac.icao24} at {_fmt_alt(ac.altitude_m)}, "
+                    f"{ac.distance_km} km away, bearing {ac.bearing_deg}°"
+                ),
+            ))
+
+    if "all_flights" in triggers:
+        matched.append(AlertTrigger(
+            kind="all_flights",
+            dedup_key=f"adsb-all-{ac.icao24}",
+            message=(
+                f"Aircraft overhead: {ac.callsign or ac.icao24} "
+                f"({ac.origin_country}) at {_fmt_alt(ac.altitude_m)}, "
+                f"{ac.distance_km} km away"
+            ),
+        ))
+
+    if "low_altitude" in triggers:
+        threshold_ft = cfg.get("alert_low_altitude_ft", 3000)
+        if ac.altitude_m is not None and ac.altitude_m * 3.281 < threshold_ft:
+            matched.append(AlertTrigger(
+                kind="low_altitude",
+                dedup_key=f"adsb-low-{ac.icao24}",
+                message=(
+                    f"Low-altitude flight: {ac.callsign or ac.icao24} at "
+                    f"{_fmt_alt(ac.altitude_m)} (threshold: {threshold_ft} ft), "
+                    f"{ac.distance_km} km away"
+                ),
+            ))
+
+    if "slow_mover" in triggers:
+        threshold_kts = cfg.get("alert_slow_speed_kts", 100)
+        if ac.velocity_mps is not None and ac.velocity_mps * 1.944 < threshold_kts:
+            speed_kts = round(ac.velocity_mps * 1.944)
+            matched.append(AlertTrigger(
+                kind="slow_mover",
+                dedup_key=f"adsb-slow-{ac.icao24}",
+                message=(
+                    f"Slow/hovering aircraft: {ac.callsign or ac.icao24} at "
+                    f"{speed_kts} kts (threshold: {threshold_kts} kts), "
+                    f"{_fmt_alt(ac.altitude_m)}, {ac.distance_km} km away"
+                ),
+            ))
+
+    if "no_callsign" in triggers:
+        if not ac.callsign or not ac.callsign.strip():
+            matched.append(AlertTrigger(
+                kind="no_callsign",
+                dedup_key=f"adsb-nocall-{ac.icao24}",
+                message=(
+                    f"No-callsign aircraft: {ac.icao24} ({ac.origin_country}) at "
+                    f"{_fmt_alt(ac.altitude_m)}, {ac.distance_km} km away"
+                ),
+            ))
+
+    return matched
+
+
+def _fmt_alt(m: float | None) -> str:
+    if m is None:
+        return "unknown alt"
+    return f"{round(m * 3.281):,} ft"
+
+
 def _haversine(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     """Great-circle distance in km."""
     rlat1, rlon1 = math.radians(lat1), math.radians(lon1)

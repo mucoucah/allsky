@@ -371,10 +371,12 @@ export interface AdsbConfig {
   poll_interval_seconds: number;
   radius_km: number;
   min_altitude_m: number;
-  alert_on_emergency_squawk: boolean;
-  alert_min_elevation_deg: number;
   show_on_overlay: boolean;
   overlay_max_aircraft: number;
+  alert_triggers: string[];
+  alert_low_altitude_ft: number;
+  alert_slow_speed_kts: number;
+  alert_cooldown_minutes: number;
   opensky_username: string;
   opensky_password: string;
   include_snapshot: boolean;
