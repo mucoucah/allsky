@@ -23,8 +23,9 @@ from app.db import connect, insert_alert
 from .channels import Attachment, dispatch
 from .focus import assess_focus
 from .meteor import detect as detect_meteor
+from .adsb import Aircraft, fetch_nearby, is_emergency
 from .rain import detect_rain
-from .store import load_channels, load_comet_config, load_focus_config, load_rain_config
+from .store import load_adsb_config, load_channels, load_comet_config, load_focus_config, load_rain_config
 
 log = logging.getLogger(__name__)
 
@@ -257,6 +258,118 @@ async def rain_watcher(stop: asyncio.Event) -> None:
             await _sleep(stop, 60)
 
     log.info("rain_watcher: stopped")
+
+
+# ── ADS-B watcher ──────────────────────────────────────────────
+
+_adsb_cache: dict = {"aircraft": [], "timestamp": 0, "count": 0}
+
+
+def get_adsb_cache() -> dict:
+    return dict(_adsb_cache)
+
+
+def set_adsb_cache(data: dict) -> None:
+    _adsb_cache.update(data)
+
+
+def _parse_coord(s: str, neg_letter: str) -> float | None:
+    s = str(s).strip()
+    if not s:
+        return None
+    sign = -1 if s.upper().endswith(neg_letter) else 1
+    s = s.rstrip("NSEWnsew").strip()
+    try:
+        return float(s) * sign
+    except ValueError:
+        return None
+
+
+def _get_camera_latlon() -> tuple[float, float] | None:
+    """Read camera lat/lon from allsky settings."""
+    try:
+        import json
+        settings_path = paths().home / "config" / "settings.json"
+        if not settings_path.exists():
+            return None
+        with settings_path.open() as f:
+            settings = json.load(f)
+        lat = _parse_coord(settings.get("latitude", ""), "S")
+        lon = _parse_coord(settings.get("longitude", ""), "W")
+        if lat is None or lon is None:
+            return None
+        return (lat, lon)
+    except Exception:
+        return None
+
+
+async def adsb_watcher(stop: asyncio.Event) -> None:
+    """Poll OpenSky Network for nearby aircraft and cache results."""
+    log.info("adsb_watcher: starting")
+
+    while not stop.is_set():
+        try:
+            cfg = load_adsb_config()
+            if not cfg.get("enabled"):
+                _adsb_cache.update({"aircraft": [], "timestamp": 0, "count": 0})
+                await _sleep(stop, 30)
+                continue
+
+            latlon = _get_camera_latlon()
+            if latlon is None:
+                log.debug("adsb_watcher: no lat/lon configured")
+                await _sleep(stop, 60)
+                continue
+
+            lat, lon = latlon
+            try:
+                aircraft = await fetch_nearby(
+                    lat, lon,
+                    radius_km=cfg.get("radius_km", 50),
+                    min_altitude_m=cfg.get("min_altitude_m", 0),
+                    username=cfg.get("opensky_username", ""),
+                    password=cfg.get("opensky_password", ""),
+                )
+            except Exception as e:
+                log.warning("adsb_watcher: OpenSky API error: %s", e)
+                await _sleep(stop, cfg.get("poll_interval_seconds", 30))
+                continue
+
+            _adsb_cache["aircraft"] = [ac.to_dict() for ac in aircraft]
+            _adsb_cache["timestamp"] = time.time()
+            _adsb_cache["count"] = len(aircraft)
+
+            if cfg.get("alert_on_emergency_squawk", True):
+                for ac in aircraft:
+                    emergency = is_emergency(ac)
+                    if not emergency:
+                        continue
+                    dedup_key = f"adsb-{ac.icao24}"
+                    today = date.today().isoformat()
+                    if await _already_alerted(dedup_key, today):
+                        continue
+                    await _record_alert(dedup_key, today)
+                    msg = (
+                        f"Emergency squawk {ac.squawk} ({emergency}) — "
+                        f"{ac.callsign or ac.icao24} at {ac.altitude_m or '?'}m, "
+                        f"{ac.distance_km}km away"
+                    )
+                    await insert_alert("warning", "adsb", msg)
+                    channels = load_channels()
+                    atts = _build_attachments(cfg.get("include_snapshot", True), False)
+                    await dispatch(channels, f"ADS-B: {emergency} — {ac.callsign or ac.icao24}", msg, atts)
+                    log.info("adsb_watcher: emergency alert — %s", msg)
+
+            poll = cfg.get("poll_interval_seconds", 30)
+            await _sleep(stop, max(poll, 6))
+
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            log.exception("adsb_watcher: error")
+            await _sleep(stop, 60)
+
+    log.info("adsb_watcher: stopped")
 
 
 # ── dedup helpers ────────────────────────────────────────────────

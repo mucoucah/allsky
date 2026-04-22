@@ -281,6 +281,17 @@ export const api = {
     contrast_score: number; message: string;
   }>("/notifications/rain/detect-now", { method: "POST" }),
 
+  // ADS-B aircraft tracking
+  adsbConfig: () => request<AdsbConfig>("/notifications/adsb/config"),
+  setAdsbConfig: (cfg: Partial<AdsbConfig>) =>
+    request<{ ok: boolean }>("/notifications/adsb/config", { method: "PUT", json: cfg }),
+  adsbNearby: () => request<{
+    aircraft: AircraftInfo[]; timestamp: number; count: number;
+  }>("/notifications/adsb/nearby"),
+  adsbScanNow: () => request<{
+    aircraft: AircraftInfo[]; timestamp: number; count: number;
+  }>("/notifications/adsb/scan-now", { method: "POST" }),
+
   // Maintenance: updates, darks, upload tests, generate for day
   checkUpdate: () => request<{
     installed: string; latest: string | null;
@@ -353,6 +364,37 @@ export interface RainConfig {
   poll_interval_minutes: number;
   confidence_threshold: number;
   include_snapshot: boolean;
+}
+
+export interface AdsbConfig {
+  enabled: boolean;
+  poll_interval_seconds: number;
+  radius_km: number;
+  min_altitude_m: number;
+  alert_on_emergency_squawk: boolean;
+  alert_min_elevation_deg: number;
+  show_on_overlay: boolean;
+  overlay_max_aircraft: number;
+  opensky_username: string;
+  opensky_password: string;
+  include_snapshot: boolean;
+}
+
+export interface AircraftInfo {
+  icao24: string;
+  callsign: string;
+  origin_country: string;
+  lat: number;
+  lon: number;
+  altitude_m: number | null;
+  velocity_mps: number | null;
+  heading_deg: number | null;
+  vertical_rate: number | null;
+  on_ground: boolean;
+  squawk: string | null;
+  distance_km: number;
+  bearing_deg: number;
+  elevation_deg: number;
 }
 
 export const fileUrl = {
