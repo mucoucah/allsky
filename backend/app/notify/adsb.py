@@ -13,9 +13,19 @@ import httpx
 
 log = logging.getLogger(__name__)
 
+
+class RateLimitError(Exception):
+    pass
+
+
 _OPENSKY_URL = "https://opensky-network.org/api/states/all"
 _EARTH_R_KM = 6371.0
 _TIMEOUT = 15.0
+_MAX_BBOX_DEG = 25.0  # OpenSky enforces max 25° × 25° bounding box
+
+# Rate limits per tier (seconds between requests).
+RATE_LIMIT_ANONYMOUS = 6    # ~10 req/min
+RATE_LIMIT_REGISTERED = 3   # ~4 req/10s = 2.5s, use 3s for safety
 
 
 @dataclass
@@ -162,11 +172,26 @@ def _elevation_angle(distance_km: float, altitude_m: float | None) -> float:
     return math.degrees(math.atan2(altitude_km, distance_km))
 
 
+def min_poll_seconds(username: str = "", password: str = "") -> int:
+    """Minimum seconds between API calls based on auth tier."""
+    if username and password:
+        return RATE_LIMIT_REGISTERED
+    return RATE_LIMIT_ANONYMOUS
+
+
 def _bbox(lat: float, lon: float, radius_km: float) -> tuple[float, float, float, float]:
-    """Bounding box (lamin, lomin, lamax, lomax) around a point."""
-    dlat = radius_km / 111.0
-    dlon = radius_km / (111.0 * max(math.cos(math.radians(lat)), 0.01))
-    return (lat - dlat, lon - dlon, lat + dlat, lon + dlon)
+    """Bounding box (lamin, lomin, lamax, lomax) around a point.
+
+    Clamped to OpenSky's 25° × 25° maximum.
+    """
+    dlat = min(radius_km / 111.0, _MAX_BBOX_DEG / 2)
+    dlon = min(radius_km / (111.0 * max(math.cos(math.radians(lat)), 0.01)), _MAX_BBOX_DEG / 2)
+    return (
+        max(lat - dlat, -90),
+        max(lon - dlon, -180),
+        min(lat + dlat, 90),
+        min(lon + dlon, 180),
+    )
 
 
 async def fetch_nearby(
@@ -192,6 +217,9 @@ async def fetch_nearby(
 
     async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
         resp = await client.get(_OPENSKY_URL, params=params, auth=auth)
+        if resp.status_code == 429:
+            log.warning("OpenSky rate limit hit (429). Back off and retry later.")
+            raise RateLimitError("OpenSky rate limit exceeded")
         resp.raise_for_status()
         data = resp.json()
 

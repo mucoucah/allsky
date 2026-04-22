@@ -23,7 +23,7 @@ from app.db import connect, insert_alert
 from .channels import Attachment, dispatch
 from .focus import assess_focus
 from .meteor import detect as detect_meteor
-from .adsb import Aircraft, evaluate_triggers, fetch_nearby, is_emergency
+from .adsb import Aircraft, RateLimitError, evaluate_triggers, fetch_nearby, is_emergency, min_poll_seconds
 from .rain import detect_rain
 from .store import load_adsb_config, load_channels, load_comet_config, load_focus_config, load_rain_config
 
@@ -323,17 +323,25 @@ async def adsb_watcher(stop: asyncio.Event) -> None:
                 continue
 
             lat, lon = latlon
+            uname = cfg.get("opensky_username", "")
+            passwd = cfg.get("opensky_password", "")
+            min_interval = min_poll_seconds(uname, passwd)
+
             try:
                 aircraft = await fetch_nearby(
                     lat, lon,
                     radius_km=cfg.get("radius_km", 50),
                     min_altitude_m=cfg.get("min_altitude_m", 0),
-                    username=cfg.get("opensky_username", ""),
-                    password=cfg.get("opensky_password", ""),
+                    username=uname,
+                    password=passwd,
                 )
+            except RateLimitError:
+                log.warning("adsb_watcher: rate limited, backing off 120s")
+                await _sleep(stop, 120)
+                continue
             except Exception as e:
                 log.warning("adsb_watcher: OpenSky API error: %s", e)
-                await _sleep(stop, cfg.get("poll_interval_seconds", 30))
+                await _sleep(stop, max(cfg.get("poll_interval_seconds", 30), min_interval))
                 continue
 
             _adsb_cache["aircraft"] = [ac.to_dict() for ac in aircraft]
@@ -364,7 +372,7 @@ async def adsb_watcher(stop: asyncio.Event) -> None:
                         log.info("adsb_watcher: %s — %s", trig.kind, trig.message)
 
             poll = cfg.get("poll_interval_seconds", 30)
-            await _sleep(stop, max(poll, 6))
+            await _sleep(stop, max(poll, min_interval))
 
         except asyncio.CancelledError:
             raise
