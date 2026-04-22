@@ -7,6 +7,7 @@ import { useLiveSocket } from "../hooks/useLiveSocket";
 import { Tile } from "../components/Tile";
 import { StatusPill } from "../components/StatusPill";
 import { SkyCard } from "../components/SkyCard";
+import { callsignLookup } from "../lib/callsigns";
 
 function fmtBytes(n: number): string {
   const units = ["B", "KB", "MB", "GB", "TB"];
@@ -24,16 +25,6 @@ function fmtUptime(s: number): string {
   return `${m}m`;
 }
 
-const _AIRLINES: Record<string, string> = {
-  AAL: "American", UAL: "United", DAL: "Delta", SWA: "Southwest",
-  JBU: "JetBlue", ASA: "Alaska", BAW: "British Airways", DLH: "Lufthansa",
-  AFR: "Air France", KLM: "KLM", RYR: "Ryanair", UAE: "Emirates",
-  QTR: "Qatar", SIA: "Singapore", FDX: "FedEx", UPS: "UPS",
-  ACA: "Air Canada", THY: "Turkish", QFA: "Qantas",
-};
-function _airlinePrefix(cs: string): string | null {
-  return _AIRLINES[cs.slice(0, 3).toUpperCase()] ?? null;
-}
 
 export default function Dashboard() {
   const qc = useQueryClient();
@@ -277,7 +268,7 @@ export default function Dashboard() {
           </div>
           <div className="flex flex-col gap-1">
             {adsb.aircraft.slice(0, 5).map((ac) => {
-              const airline = ac.callsign ? _airlinePrefix(ac.callsign) : null;
+              const airline = ac.callsign ? callsignLookup(ac.callsign) : null;
               return (
                 <div key={ac.icao24} className="flex items-center justify-between text-xs">
                   <div className="flex items-center gap-1.5 min-w-0">
