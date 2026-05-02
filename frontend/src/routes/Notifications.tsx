@@ -22,7 +22,7 @@ export default function Notifications() {
 
 // ── Channels ────────────────────────────────────────────────────
 
-function ChannelsSection() {
+export function ChannelsSection() {
   const qc = useQueryClient();
   const { data } = useQuery({ queryKey: ["channels"], queryFn: api.notifChannels });
   const del = useMutation({
@@ -174,7 +174,7 @@ function AddChannelForm({ onDone }: { onDone: () => void }) {
 
 // ── Manual send ─────────────────────────────────────────────────
 
-function ManualSendSection() {
+export function ManualSendSection() {
   const [subject, setSubject] = useState("Allsky observation");
   const [body, setBody] = useState("");
   const [snap, setSnap] = useState(true);
@@ -229,7 +229,7 @@ function ManualSendSection() {
 
 // ── Meteor detection ────────────────────────────────────────────
 
-function MeteorSection() {
+export function MeteorSection() {
   const qc = useQueryClient();
   const { data: cfg } = useQuery({ queryKey: ["meteorCfg"], queryFn: api.meteorConfig });
   const save = useMutation({
@@ -307,7 +307,7 @@ function MeteorSection() {
 
 // ── Focus monitoring ────────────────────────────────────────────
 
-function FocusSection() {
+export function FocusSection() {
   const qc = useQueryClient();
   const { data: cfg } = useQuery({ queryKey: ["focusCfg"], queryFn: api.focusConfig });
   const { data: current } = useQuery({
@@ -419,7 +419,7 @@ function FocusSection() {
 
 // ── tiny helper widgets ─────────────────────────────────────────
 
-function ToggleField({
+export function ToggleField({
   label,
   value,
   onChange,
@@ -436,7 +436,7 @@ function ToggleField({
   );
 }
 
-function NumberField({
+export function NumberField({
   label,
   value,
   onChange,
@@ -476,7 +476,7 @@ function NumberField({
 
 // ── Rain Detection ─────────────────────────────────────────────
 
-function RainSection() {
+export function RainSection() {
   const qc = useQueryClient();
   const { data: cfg } = useQuery({ queryKey: ["rainCfg"], queryFn: api.rainConfig });
   const update = useMutation({
@@ -565,7 +565,7 @@ function bearingLabel(deg: number): string {
   return dirs[Math.round(deg / 45) % 8];
 }
 
-function AdsbSection() {
+export function AdsbSection() {
   const qc = useQueryClient();
   const { data: cfg } = useQuery({ queryKey: ["adsbCfg"], queryFn: api.adsbConfig });
   const update = useMutation({
@@ -819,7 +819,7 @@ function fmtTime(iso: string): string {
   } catch { return iso.slice(11, 16); }
 }
 
-function SatelliteSection() {
+export function SatelliteSection() {
   const qc = useQueryClient();
   const { data: cfg } = useQuery({ queryKey: ["satCfg"], queryFn: api.satConfig });
   const update = useMutation({
