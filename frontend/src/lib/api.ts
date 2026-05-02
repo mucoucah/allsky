@@ -303,7 +303,17 @@ export const api = {
     passes: SatPass[]; overhead: SatPosition[]; timestamp: number;
   }>("/notifications/satellites/scan-now", { method: "POST" }),
 
-  // Maintenance: updates, darks, upload tests, generate for day
+  // Maintenance: updates, darks, upload tests, generate for day, daily-lapse
+  dailylapsePreview: (opts: DailylapseOpts) =>
+    request<{ frame_count: number; frames: DailylapseFrame[] }>("/maintenance/dailylapse/preview", { method: "POST", json: opts }),
+  dailylapseGenerate: (opts: DailylapseOpts) =>
+    request<{ ok: boolean; frames_used: number; date_range: string; video_url: string }>(
+      "/maintenance/dailylapse/generate", { method: "POST", json: opts }),
+  dailylapseList: () =>
+    request<{ videos: DailylapseVideo[] }>("/maintenance/dailylapse/list"),
+  dailylapseDelete: (label: string) =>
+    request<{ ok: boolean }>(`/maintenance/dailylapse/video/${label}`, { method: "DELETE" }),
+
   checkUpdate: () => request<{
     installed: string; latest: string | null;
     update_available: boolean;
@@ -457,6 +467,31 @@ export interface SatPosition {
   range_km: number;
   is_sunlit: boolean;
   group: string;
+}
+
+export interface DailylapseOpts {
+  mode: "fixed" | "sunrise" | "sunset" | "solar_noon";
+  clock_time?: string;
+  start_date?: string;
+  end_date?: string;
+  max_offset_min?: number;
+  fps?: number;
+  label?: string;
+}
+
+export interface DailylapseFrame {
+  date: string;
+  target_time: string;
+  actual_time: string;
+  offset_sec: number;
+  filename: string;
+}
+
+export interface DailylapseVideo {
+  name: string;
+  size_mb: number;
+  created: number;
+  url: string;
 }
 
 export const fileUrl = {
