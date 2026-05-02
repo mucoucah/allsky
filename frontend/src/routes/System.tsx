@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import { api, AllskyDiskUsage } from "../lib/api";
 import { StatusPill } from "../components/StatusPill";
+import { UpdateSection, DarksSection, GenerateForDateSection, UploadSection } from "./Maintenance";
 
 export default function System() {
   const { data: sys, refetch: refetchSys } = useQuery({
@@ -350,9 +351,20 @@ export default function System() {
         </pre>
       </div>
 
+      {/* ── Maintenance ──────────────────────────────────────────── */}
+      <div className="border-t border-bg-raised pt-4 mt-2">
+        <h2 className="text-lg font-semibold mb-4">Maintenance</h2>
+        <div className="flex flex-col gap-6 max-w-4xl">
+          <UpdateSection />
+          <DarksSection />
+          <GenerateForDateSection />
+          <UploadSection />
+        </div>
+      </div>
+
       {/* System info footer */}
       {h && (
-        <div className="text-xs text-ink-dim flex flex-wrap gap-4">
+        <div className="text-xs text-ink-dim flex flex-wrap gap-4 mt-4">
           <span>Python {h.python_version}</span>
           <span>Hostname: {h.hostname}</span>
           <span>OS: {h.os}</span>

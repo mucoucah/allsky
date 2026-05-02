@@ -3,7 +3,7 @@ import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import {
   LayoutDashboard, Image as ImageIcon, Settings as SettingsIcon,
-  Eraser, BarChart3, Film, Bell, Cpu, Radar, Wrench, Package, Layers,
+  Film, Bell, Cpu, Radar, Layers,
 } from "lucide-react";
 import { api } from "../lib/api";
 import { LogConsole } from "./LogConsole";
@@ -11,16 +11,12 @@ import { LogConsole } from "./LogConsole";
 const links = [
   { to: "/",               label: "Dashboard",     Icon: LayoutDashboard },
   { to: "/gallery",        label: "Gallery",        Icon: ImageIcon },
+  { to: "/media",          label: "Media",          Icon: Film },
   { to: "/settings",       label: "Settings",       Icon: SettingsIcon },
-  { to: "/mask",           label: "Mask",           Icon: Eraser },
-  { to: "/overlay",        label: "Overlay",        Icon: Layers },
-  { to: "/keograms",       label: "Keograms",       Icon: BarChart3 },
-  { to: "/videos",         label: "Videos",         Icon: Film },
+  { to: "/image-tools",    label: "Image Tools",    Icon: Layers },
+  { to: "/sky-monitor",    label: "Sky Monitor",    Icon: Radar },
   { to: "/alerts",         label: "Alerts",         Icon: Bell },
-  { to: "/notifications",  label: "Notifications",  Icon: Radar },
-  { to: "/setup",          label: "Setup",          Icon: Wrench },
   { to: "/system",         label: "System",         Icon: Cpu },
-  { to: "/maintenance",    label: "Maintenance",    Icon: Package },
 ];
 
 export default function Layout() {

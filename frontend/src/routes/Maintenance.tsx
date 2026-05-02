@@ -20,7 +20,7 @@ export default function Maintenance() {
 
 /* ── Update check ─────────────────────────────────────────────── */
 
-function UpdateSection() {
+export function UpdateSection() {
   const { data, refetch, isFetching } = useQuery({
     queryKey: ["check-update"],
     queryFn: api.checkUpdate,
@@ -87,7 +87,7 @@ function UpdateSection() {
 
 /* ── Dark frames ──────────────────────────────────────────────── */
 
-function DarksSection() {
+export function DarksSection() {
   const qc = useQueryClient();
   const { data } = useQuery({ queryKey: ["darks"], queryFn: api.listDarks });
   const capture = useMutation({
@@ -161,7 +161,7 @@ function DarksSection() {
 
 /* ── Generate for past date ────────────────────────────────────── */
 
-function GenerateForDateSection() {
+export function GenerateForDateSection() {
   const { data: dates } = useQuery({
     queryKey: ["available-dates"],
     queryFn: api.availableDates,
@@ -239,7 +239,7 @@ function GenerateForDateSection() {
 
 /* ── Upload / Remote Website ──────────────────────────────────── */
 
-function UploadSection() {
+export function UploadSection() {
   const [type, setType] = useState<"local-web" | "remote-web" | "remote-server">("remote-web");
   const [cfg, setCfg] = useState<Record<string, string>>({});
   const test = useMutation({ mutationFn: (body: any) => api.testUpload(body) });
@@ -318,7 +318,7 @@ const MODE_OPTIONS = [
   { value: "solar_noon", label: "Solar noon" },
 ] as const;
 
-function DailyLapseSection() {
+export function DailyLapseSection() {
   const qc = useQueryClient();
   const [mode, setMode] = useState<string>("fixed");
   const [clockTime, setClockTime] = useState("12:00");
