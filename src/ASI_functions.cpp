@@ -2277,7 +2277,13 @@ bool validateSettings(config *cg, ASI_CAMERA_INFO ci)
 	// If this camera model/name is different than the last one it likely means the settings
 	// are the the last camera as well, so stop.
 	char *model = getCameraModel(ci.Name);
-	if (strcmp(model, cg->cm) != 0)
+	// "imx290" and "imx290 60.00 fps" are the same sensor. ZWO names stay exact.
+#ifdef IS_RPi
+	bool modelOk = (cg->cm != NULL && sameRPiCamera(cg->cm, model, model));
+#else
+	bool modelOk = (cg->cm != NULL && strcmp(model, cg->cm) == 0);
+#endif
+	if (! modelOk)
 	{
 		Log(0, "%s: ERROR: camera model changed; was [%s], now [%s].\n", cg->ME, cg->cm, model);
 		closeUp(EXIT_ERROR_STOP);

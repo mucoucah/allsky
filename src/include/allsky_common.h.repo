@@ -212,6 +212,7 @@ struct config {			// for configuration variables
 
 	// The following settings are based on command-line arguments.
 	bool help							= false;		// User wants usage message displayed
+	bool checkArgs						= false;		// Parse settings and exit before the camera
 	bool quietExit						= false;		// Exit without any messages
 	const char *version					= "UNKNOWN";	// Allsky version
 	bool isLibcamera					= true;			// RPi only

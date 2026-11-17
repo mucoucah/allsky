@@ -126,7 +126,9 @@ def main():
             if args.prefix and f"{args.prefix}{name}" not in requested_vars:
                 continue
 
-        if args.capture_only:
+        if args.capture_only and options_path.exists():
+            # No options.json means we cannot know usage. Pass the settings
+            # through so latitude/longitude are not silently discarded.
             opt = options_by_name.get(name, {})
             if opt.get("usage") != "capture":
                 continue
