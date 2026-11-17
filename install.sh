@@ -5,7 +5,8 @@
 # It replaces upstream's install.sh with a single script that does everything.
 #
 # Usage:
-#   sudo ./install.sh
+#   sudo ./install.sh          # full camera + web UI (default)
+#   sudo ./install.sh --light  # Pi light client: capture, thermal guard, sync only
 #
 # What it does:
 #   1. Installs OS packages (python, node, opencv deps, libcamera, etc.)
@@ -18,6 +19,15 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 export ALLSKY_HOME="${SCRIPT_DIR}"
+
+for _arg in "$@"; do
+  case "${_arg}" in
+    --light|--profile=light)
+      exec "${SCRIPT_DIR}/offload/pi/install-light.sh"
+      ;;
+  esac
+done
+
 INSTALL_PREFIX="/opt/allsky-web"
 DATA_DIR="/var/lib/allsky-web"
 SERVICE_USER="allskyweb"

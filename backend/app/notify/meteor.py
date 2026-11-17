@@ -144,10 +144,63 @@ def _apply_mask(gray: np.ndarray, mask_path: Path | None) -> np.ndarray:
     return cv2.bitwise_and(gray, gray, mask=cv2.bitwise_not(mask_img))
 
 
-def prepare_gray(image_bgr: np.ndarray, mask_path: Path | None, scale: float) -> np.ndarray:
+_CUDA_UNUSABLE = False
+
+
+def cuda_device_count() -> int:
+    cuda = getattr(cv2, "cuda", None)
+    if cuda is None:
+        return 0
+    try:
+        return int(cv2.cuda.getCudaEnabledDeviceCount())
+    except Exception:
+        return 0
+
+
+def _gray_scaled(image_bgr: np.ndarray, scale: float, use_cuda: bool) -> np.ndarray:
+    """Grayscale and optional downscale. CUDA when the build has a device."""
+    global _CUDA_UNUSABLE
+    if use_cuda and not _CUDA_UNUSABLE and cuda_device_count() > 0:
+        try:
+            gpu = cv2.cuda_GpuMat()
+            gpu.upload(image_bgr)
+            gray_gpu = cv2.cuda.cvtColor(gpu, cv2.COLOR_BGR2GRAY)
+            if scale != 1.0:
+                width = max(1, int(round(image_bgr.shape[1] * scale)))
+                height = max(1, int(round(image_bgr.shape[0] * scale)))
+                gray_gpu = cv2.cuda.resize(gray_gpu, (width, height), interpolation=cv2.INTER_AREA)
+            return gray_gpu.download()
+        except Exception:
+            _CUDA_UNUSABLE = True
+            log.info("meteor: CUDA grayscale unavailable, using CPU")
     gray = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2GRAY)
     if scale != 1.0:
         gray = cv2.resize(gray, (0, 0), fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
+    return gray
+
+
+def _canny(working: np.ndarray, use_cuda: bool) -> np.ndarray:
+    global _CUDA_UNUSABLE
+    image = working.astype(np.uint8)
+    if use_cuda and not _CUDA_UNUSABLE and cuda_device_count() > 0:
+        try:
+            gpu = cv2.cuda_GpuMat()
+            gpu.upload(image)
+            detector = cv2.cuda.createCannyEdgeDetector(100, 200, 3)
+            return detector.detect(gpu).download()
+        except Exception:
+            _CUDA_UNUSABLE = True
+            log.info("meteor: CUDA Canny unavailable, using CPU")
+    return cv2.Canny(image, 100, 200, apertureSize=3)
+
+
+def prepare_gray(
+    image_bgr: np.ndarray,
+    mask_path: Path | None,
+    scale: float,
+    use_cuda: bool = False,
+) -> np.ndarray:
+    gray = _gray_scaled(image_bgr, scale, use_cuda)
     return _apply_mask(gray, mask_path)
 
 
@@ -202,6 +255,7 @@ def analyze(
     history: list[np.ndarray] | None = None,
     previous_lines: list[tuple[int, int, int, int]] | None = None,
     scale: float = DEFAULT_SCALE,
+    use_cuda: bool = False,
 ) -> tuple[MeteorResult, np.ndarray | None, np.ndarray | None]:
     """Detect streaks. Returns (result, downscaled gray, full BGR).
 
@@ -216,7 +270,7 @@ def analyze(
     original = img.copy()
 
     full_h, full_w = img.shape[:2]
-    small = prepare_gray(img, mask_path, scale)
+    small = prepare_gray(img, mask_path, scale, use_cuda=use_cuda)
     ref = _reference(previous_gray, history)
     temporal = ref is not None and ref.shape == small.shape
     if temporal:
@@ -225,7 +279,7 @@ def analyze(
     else:
         working = small
 
-    edges = cv2.Canny(working.astype(np.uint8), 100, 200, apertureSize=3)
+    edges = _canny(working, use_cuda)
     kernel = np.ones((3, 3), np.uint8)
     processed = cv2.dilate(edges, kernel, iterations=2)
     processed = cv2.erode(processed, kernel, iterations=1)
@@ -299,6 +353,7 @@ def detect(
     history: list[np.ndarray] | None = None,
     previous_lines: list[tuple[int, int, int, int]] | None = None,
     scale: float = DEFAULT_SCALE,
+    use_cuda: bool = False,
 ) -> MeteorResult:
     """Run meteor detection on a single image file."""
     result, _, _ = analyze(
@@ -311,5 +366,6 @@ def detect(
         history=history,
         previous_lines=previous_lines,
         scale=scale,
+        use_cuda=use_cuda,
     )
     return result

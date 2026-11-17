@@ -68,6 +68,7 @@ async def apply_settings(changes: dict[str, Any]) -> dict[str, Any]:
     current = load_values()
     current.update(changes)
     save_values(current)
+    _publish_settings_to_pi(current)
 
     # Best-effort: run makeChanges.sh for side-effects if it exists.
     script = paths().make_changes_script
@@ -89,3 +90,32 @@ async def apply_settings(changes: dict[str, Any]) -> dict[str, Any]:
                 script_results.append({"key": key, "value": v, "exit_code": -1, "error": str(e)})
 
     return {"ok": True, "saved": list(changes.keys()), "script_results": script_results}
+
+
+def _publish_settings_to_pi(values: dict[str, Any]) -> None:
+    """Copy camera settings where the Pi sync agent pulls them.
+
+    No-op when the processor directory is not configured or not creatable.
+    The Pi keeps capturing with the previous settings until this file changes.
+    """
+    import json
+    import logging
+    from pathlib import Path
+
+    log = logging.getLogger(__name__)
+    try:
+        from app.routers.offload import _ensure_offload_path, publish_for_pi
+        _ensure_offload_path()
+        from offload.config import load_config
+        cfg = load_config()
+        publish_for_pi(cfg)
+        dest_dir = Path(cfg.processor.to_pi_dir)
+        if not str(dest_dir):
+            return
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        target = dest_dir / "settings.json"
+        tmp = target.with_suffix(".tmp")
+        tmp.write_text(json.dumps(values, indent=4) + "\n")
+        tmp.replace(target)
+    except Exception as exc:  # noqa: BLE001
+        log.info("settings not published for the Pi (%s)", exc)

@@ -1,0 +1,32 @@
+{
+  "mode": "normal",
+  "jpeg_quality": 90,
+  "outbox_dir": "/var/lib/allsky/outbox",
+  "outbox_max_bytes": 4294967296,
+  "drop_day_frames": false,
+  "night_priority": true,
+  "remote": {
+    "host": "192.168.1.20",
+    "port": 2222,
+    "user": "allsky",
+    "path": "/srv/allsky/incoming",
+    "ssh_key": "/home/pi/.ssh/allsky_offload",
+    "bandwidth_limit_kbps": 2000,
+    "settings_path": "/srv/allsky/to-pi",
+    "status_name": "status/pi-status.json"
+  },
+  "processor": {
+    "incoming_dir": "/srv/allsky/incoming",
+    "data_dir": "/srv/allsky/data",
+    "to_pi_dir": "/srv/allsky/to-pi",
+    "retention_days": 14,
+    "max_disk_bytes": 0,
+    "encoder": "auto",
+    "meteor_scale": 1.0,
+    "use_cuda": "auto",
+    "min_streak_length": 100,
+    "poll_seconds": 2,
+    "quiet_with_day_seconds": 300,
+    "quiet_alone_seconds": 2700
+  }
+}

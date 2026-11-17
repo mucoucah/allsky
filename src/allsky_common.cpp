@@ -521,7 +521,13 @@ bool checkForValidExtension(config *cg)
 		}
 		cg->imageExt = "jpg";
 		cg->extensionType = isJPG;
-		cg->quality = 100;
+		// JPEG default stays 100. A config or command-line `quality` value
+		// other than the header default (qualityJPG, 95) is an explicit request
+		// and is kept. Capture-only offload uses this to ask libcamera for ~90.
+		if (cg->userQuality != cg->qualityJPG)
+			cg->quality = cg->userQuality;
+		else
+			cg->quality = 100;
 
 		compressionParameters.push_back(cv::IMWRITE_JPEG_QUALITY);
 

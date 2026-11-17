@@ -9,6 +9,11 @@ source "${ALLSKY_HOME}/variables.sh"			|| exit "${EXIT_ERROR_STOP}"
 #shellcheck source-path=scripts
 source "${ALLSKY_SCRIPTS}/functions.sh"			|| exit "${EXIT_ERROR_STOP}"
 
+if [[ -f ${ALLSKY_HOME}/offload/mode.py ]] && python3 "${ALLSKY_HOME}/offload/mode.py" --quiet; then
+	echo "${ME}: capture-only — skipping end-of-day modules"
+	exit 0
+fi
+
 if [[ $# -eq 1 ]]; then
 	if [[ ${1} == "--help" ]]; then
 		echo -e "Usage: ${ME} [YYYYmmdd]"

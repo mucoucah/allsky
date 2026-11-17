@@ -9,6 +9,7 @@ import { api, AllskyDiskUsage, ThermalConfig } from "../lib/api";
 import { usePollInterval } from "../hooks/usePollInterval";
 import { StatusPill } from "../components/StatusPill";
 import { UpdateSection, DarksSection, GenerateForDateSection, UploadSection } from "./Maintenance";
+import OffloadPanel from "../components/OffloadPanel";
 
 export default function System() {
   const systemPoll = usePollInterval(15_000);
@@ -106,6 +107,8 @@ export default function System() {
       </div>
 
       <ThermalCard />
+
+      <OffloadPanel />
 
       {/* System monitors — horizontal bar charts */}
       {h && (

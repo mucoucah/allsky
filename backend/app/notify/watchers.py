@@ -34,6 +34,35 @@ from .store import load_adsb_config, load_channels, load_comet_config, load_focu
 
 log = logging.getLogger(__name__)
 
+
+def _capture_only() -> bool:
+    """True when this machine's offload.json says the Pi only captures.
+
+    The PC web UI uses the same flag so it does not run a second detector on
+    the preview frame. A missing file means normal mode.
+    """
+    import json
+    import os
+
+    candidates: list[Path] = []
+    explicit = os.environ.get("ALLSKY_OFFLOAD_CONFIG", "").strip()
+    if explicit:
+        candidates.append(Path(explicit))
+    home = os.environ.get("ALLSKY_HOME", "").strip()
+    if home:
+        candidates.append(Path(home) / "config" / "offload.json")
+    candidates.append(Path("/etc/allsky/offload.json"))
+    for path in candidates:
+        try:
+            if not path.is_file():
+                continue
+            data = json.loads(path.read_text())
+        except (OSError, ValueError):
+            continue
+        if isinstance(data, dict):
+            return str(data.get("mode", "normal")).strip() == "capture-only"
+    return False
+
 # ── helpers ──────────────────────────────────────────────────────
 
 def _read_file(path: Path, max_mb: float = 10.0) -> bytes | None:
@@ -184,6 +213,12 @@ async def meteor_watcher(stop: asyncio.Event) -> None:
 
     while not stop.is_set():
         try:
+            if _capture_only():
+                history.clear()
+                previous_lines = []
+                pending = None
+                await _sleep(stop, 60)
+                continue
             cfg = load_comet_config()
             if not cfg.get("enabled"):
                 if pending and pending.get("lines"):
@@ -242,6 +277,54 @@ async def meteor_watcher(stop: asyncio.Event) -> None:
     log.info("meteor_watcher: stopped")
 
 
+async def offload_hit_watcher(stop: asyncio.Event) -> None:
+    """Alert on meteor hits the PC processor already saved.
+
+    Capture-only mode does not run meteor_watcher. Hits land as JSON files
+    under html/allsky/meteors/. This sends the same cooldown-limited alert.
+    """
+    log.info("offload_hit_watcher: starting")
+    seen: set[str] = set()
+    primed = False
+    while not stop.is_set():
+        try:
+            if not _capture_only():
+                primed = False
+                seen.clear()
+                await _sleep(stop, 60)
+                continue
+            root = paths().html / "allsky" / "meteors"
+            found = sorted(root.glob("*/*.json")) if root.is_dir() else []
+            if not primed:
+                seen = {str(path) for path in found}
+                primed = True
+                await _sleep(stop, 5)
+                continue
+            cfg = load_comet_config()
+            for path in found:
+                key = str(path)
+                if key in seen:
+                    continue
+                seen.add(key)
+                if not cfg.get("enabled"):
+                    log.info("offload_hit_watcher: %s saved, alerts disabled", path.name)
+                    continue
+                if not _alert_allowed(cfg):
+                    log.info("offload_hit_watcher: %s saved, alert in cooldown", path.name)
+                    continue
+                _save_meteor_state({"last_alert_ts": time.time()})
+                await insert_alert("info", "meteor", f"meteor hit {path.name}")
+                channels = load_channels()
+                subject = "Meteor detected"
+                body = f"Hit saved at {path}."
+                await dispatch(channels, subject, body, [])
+                log.info("offload_hit_watcher: alerted %s", path.name)
+        except Exception:
+            log.exception("offload_hit_watcher failed")
+        await _sleep(stop, 5)
+    log.info("offload_hit_watcher: stopped")
+
+
 # ── focus watcher ────────────────────────────────────────────────
 
 async def focus_watcher(stop: asyncio.Event) -> None:
@@ -250,6 +333,10 @@ async def focus_watcher(stop: asyncio.Event) -> None:
 
     while not stop.is_set():
         try:
+            if _capture_only():
+                consecutive_soft = 0
+                await _sleep(stop, 60)
+                continue
             cfg = load_focus_config()
             if not cfg.get("enabled"):
                 consecutive_soft = 0
@@ -320,6 +407,9 @@ async def rain_watcher(stop: asyncio.Event) -> None:
 
     while not stop.is_set():
         try:
+            if _capture_only():
+                await _sleep(stop, 60)
+                continue
             cfg = load_rain_config()
             if not cfg.get("enabled"):
                 await _sleep(stop, 30)

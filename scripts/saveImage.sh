@@ -49,6 +49,23 @@ if [[ ! -s ${CURRENT_IMAGE} ]] ; then
 	exit 2
 fi
 
+# Capture-only offload: keep the frame, skip ImageMagick, overlays, and modules.
+# Exit 0 means the frame was queued. Exit 2 means normal mode. Anything else is an error.
+if [[ -f ${ALLSKY_HOME}/offload/enqueue_frame.py ]]; then
+	python3 "${ALLSKY_HOME}/offload/enqueue_frame.py" \
+		--day-or-night "${DAY_OR_NIGHT}" \
+		--image "${CURRENT_IMAGE}" \
+		--tmp "${ALLSKY_TMP}"
+	ENQUEUE_RC=$?
+	if [[ ${ENQUEUE_RC} -eq 0 ]]; then
+		exit 0
+	fi
+	if [[ ${ENQUEUE_RC} -ne 2 ]]; then
+		E_ "*** ${ME}: capture-only enqueue failed (${ENQUEUE_RC})."
+		exit "${ENQUEUE_RC}"
+	fi
+fi
+
 # This gets all settings and prefixes their names with "S_".
 # It's faster than calling "settings()" a bunch of times.
 #shellcheck disable=SC2119
