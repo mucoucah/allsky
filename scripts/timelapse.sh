@@ -315,8 +315,14 @@ else
 	W="$( settings ".timelapsewidth" )"
 	H="$( settings ".timelapseheight" )"
 fi
-if [[ ${W} -gt 0 ]]; then
-	SCALE="-filter:v scale=${W}:${H}"
+# Never upscale. A width of 1920 matches the IMX462 and only shrinks wider sensors.
+# Commas are not word separators, so the filter stays one argument.
+if [[ ${W} -gt 0 && ${H} -gt 0 ]]; then
+	SCALE="-filter:v scale=min(${W},iw):min(${H},ih):force_original_aspect_ratio=decrease"
+elif [[ ${W} -gt 0 ]]; then
+	SCALE="-filter:v scale=min(${W},iw):-2"
+elif [[ ${H} -gt 0 ]]; then
+	SCALE="-filter:v scale=-2:min(${H},ih)"
 else
 	SCALE=""
 fi
@@ -324,12 +330,21 @@ FFLOG="$( settings ".timelapsefflog" )"
 VCODEC="$( settings ".timelapsevcodec" )"
 PIX_FMT="$( settings ".timelapsepixfmt" )"
 EXTRA="$( settings ".timelapseextraparameters" )"
+PRESET=""
+if [[ ${VCODEC} == "libx264" ]]; then
+	PRESET="-preset veryfast"
+fi
+PRIORITY=(nice -n 15)
+if command -v ionice >/dev/null 2>&1; then
+	PRIORITY+=(ionice -c 2 -n 7)
+fi
 # shellcheck disable=SC2086,SC2046
-X="$( ffmpeg -y -f image2 \
+X="$( "${PRIORITY[@]}" ffmpeg -y -f image2 \
 	-loglevel "${FFLOG}" \
 	-r "${FPS}" \
 	-i "${SEQUENCE_DIR}/%04d.${EXTENSION}" \
 	-vcodec "${VCODEC}" \
+	${PRESET} \
 	-b:v "${TIMELAPSE_BITRATE}k" \
 	-pix_fmt "${PIX_FMT}" \
 	-movflags +faststart \

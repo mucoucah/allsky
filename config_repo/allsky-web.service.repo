@@ -1,0 +1,17 @@
+[Unit]
+Description=Allsky modern web interface
+After=network-online.target allsky.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=XX_ALLSKY_OWNER_XX
+Group=XX_ALLSKY_GROUP_XX
+EnvironmentFile=-/etc/allsky-web/env
+WorkingDirectory=XX_ALLSKY_WEB_PREFIX_XX/backend
+ExecStart=XX_ALLSKY_WEB_PREFIX_XX/backend/run-web.sh
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import { Wrench, Play, Square, Zap, AlertTriangle, CloudRain, Plane, Satellite, X } from "lucide-react";
 import { api, fileUrl } from "../lib/api";
 import { useLiveSocket } from "../hooks/useLiveSocket";
+import { usePollInterval } from "../hooks/usePollInterval";
 import { Tile } from "../components/Tile";
 import { StatusPill } from "../components/StatusPill";
 import { SkyCard } from "../components/SkyCard";
@@ -39,12 +40,14 @@ export default function Dashboard() {
     return () => window.removeEventListener("keydown", onKey);
   }, [fullscreen]);
 
-  // Cache-bust the HTTP fallback image every 5 seconds (when WS not connected).
+  const dashboardPoll = usePollInterval(30_000);
+  // Cache-bust the HTTP fallback image on the same slow cadence, and stop while the tab is hidden.
   const [bust, setBust] = useState(Date.now());
   useEffect(() => {
-    const id = setInterval(() => setBust(Date.now()), 5_000);
+    if (dashboardPoll === false) return;
+    const id = setInterval(() => setBust(Date.now()), dashboardPoll);
     return () => clearInterval(id);
-  }, []);
+  }, [dashboardPoll]);
 
   // Throttle banner dismissal state (stored in sessionStorage).
   const [throttleDismissed, setThrottleDismissed] = useState<string>(
@@ -66,19 +69,19 @@ export default function Dashboard() {
   const { data: sys } = useQuery({
     queryKey: ["system"],
     queryFn: api.system,
-    refetchInterval: 5_000,
+    refetchInterval: dashboardPoll,
   });
 
   const { data: msgs } = useQuery({
     queryKey: ["messages"],
     queryFn: api.messages,
-    refetchInterval: 15_000,
+    refetchInterval: dashboardPoll,
   });
 
   const { data: focus } = useQuery({
     queryKey: ["focusCurrent"],
     queryFn: api.currentFocus,
-    refetchInterval: 10_000,
+    refetchInterval: dashboardPoll,
   });
 
   const { data: setupStatus } = useQuery({
@@ -91,7 +94,7 @@ export default function Dashboard() {
   const { data: alerts } = useQuery({
     queryKey: ["alerts"],
     queryFn: api.alerts,
-    refetchInterval: 60_000,
+    refetchInterval: dashboardPoll ? 60_000 : false,
   });
   const ackAlert = useMutation({
     mutationFn: api.ackAlert,
@@ -116,13 +119,13 @@ export default function Dashboard() {
   const { data: adsb } = useQuery({
     queryKey: ["adsbNearby"],
     queryFn: api.adsbNearby,
-    refetchInterval: 15_000,
+    refetchInterval: dashboardPoll ? 60_000 : false,
   });
 
   const { data: satData } = useQuery({
     queryKey: ["satPasses"],
     queryFn: api.satPasses,
-    refetchInterval: 60_000,
+    refetchInterval: dashboardPoll ? 60_000 : false,
   });
 
   const satAlert = useMemo(() => {
@@ -137,6 +140,22 @@ export default function Dashboard() {
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      {sys?.host.thermal && sys.host.thermal.state !== "ok" && (
+        <div className={`lg:col-span-3 card flex items-start gap-3 ${
+          sys.host.thermal.state === "stopped" ? "border-err/40 bg-err/10" : "border-warn/40 bg-warn/10"
+        }`}>
+          <Zap size={22} className={sys.host.thermal.state === "stopped" ? "text-err" : "text-warn"} />
+          <div>
+            <div className="font-semibold">
+              {sys.host.thermal.state === "stopped" ? "Capture paused — CPU too hot" : "CPU warm — capture slowed"}
+            </div>
+            <div className="text-sm text-ink-muted mt-0.5">
+              {sys.host.thermal.message}
+              {sys.host.thermal.temp_c != null && ` (${sys.host.thermal.temp_c.toFixed(1)} °C)`}
+            </div>
+          </div>
+        </div>
+      )}
       {/* Setup banner for fresh installs */}
       {setupStatus && !setupStatus.has_camera && (
         <Link

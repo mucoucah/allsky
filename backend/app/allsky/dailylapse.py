@@ -162,14 +162,31 @@ def collect_frames(
     return frames
 
 
+def _scale_args(width: int, height: int) -> list[str]:
+    """Cap the output size. Never upscale."""
+    if width > 0 and height > 0:
+        return [
+            "-filter:v",
+            f"scale=min({width},iw):min({height},ih):force_original_aspect_ratio=decrease",
+        ]
+    if width > 0:
+        return ["-filter:v", f"scale=min({width},iw):-2"]
+    if height > 0:
+        return ["-filter:v", f"scale=-2:min({height},ih)"]
+    return []
+
+
 async def generate_dailylapse(
     frames: list[DailyFrame],
     output_path: Path,
     fps: int = 10,
-    width: int = 0,
+    width: int = 1920,
     height: int = 0,
 ) -> bool:
-    """Generate a video from daily frames using ffmpeg."""
+    """Generate a video from daily frames using ffmpeg.
+
+    libx264 veryfast, nice/ionice, and a 1920-wide cap (native IMX462, no upscale).
+    """
     if len(frames) < 2:
         log.warning("Need at least 2 frames, got %d", len(frames))
         return False
@@ -182,20 +199,22 @@ async def generate_dailylapse(
             os.symlink(frame.path, link)
 
         ext = frames[0].path.suffix
-        scale = ""
-        if width > 0 and height > 0:
-            scale = f"-filter:v scale={width}:{height}"
-        elif width > 0:
-            scale = f"-filter:v scale={width}:-2"
-
-        cmd = (
-            f"ffmpeg -y -f image2 -r {fps} "
-            f"-i '{tmpdir}/%05d{ext}' "
-            f"-vcodec libx264 -pix_fmt yuv420p -movflags +faststart "
-            f"{scale} '{output_path}'"
-        )
-        proc = await asyncio.create_subprocess_shell(
-            cmd,
+        prefix: list[str] = []
+        if shutil.which("nice") and shutil.which("ionice"):
+            prefix = ["nice", "-n", "15", "ionice", "-c", "2", "-n", "7"]
+        elif shutil.which("nice"):
+            prefix = ["nice", "-n", "15"]
+        cmd = [
+            *prefix,
+            "ffmpeg", "-y", "-f", "image2", "-r", str(fps),
+            "-i", str(Path(tmpdir) / f"%05d{ext}"),
+            "-vcodec", "libx264", "-preset", "veryfast",
+            "-pix_fmt", "yuv420p", "-movflags", "+faststart",
+            *_scale_args(width, height),
+            str(output_path),
+        ]
+        proc = await asyncio.create_subprocess_exec(
+            *cmd,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )

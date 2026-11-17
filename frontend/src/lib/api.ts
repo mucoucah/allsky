@@ -110,6 +110,20 @@ export interface SystemSnapshot {
       under_voltage_occurred: boolean; freq_capped_occurred: boolean;
       throttled_occurred: boolean; soft_temp_limit_occurred: boolean;
     } | null;
+    thermal?: {
+      enabled: boolean;
+      state: "ok" | "warm" | "stopped";
+      temp_c: number | null;
+      warn_c: number;
+      stop_c: number;
+      resume_c: number;
+      poll_seconds: number;
+      skip_processing: boolean;
+      extra_delay_ms: number;
+      throttled: boolean;
+      capture_held: boolean;
+      message: string;
+    } | null;
   };
   allsky: {
     version: string;
@@ -140,6 +154,12 @@ export interface ImageRow {
 
 export const api = {
   health: () => request<{ ok: boolean; version: string }>("/health"),
+  whoami: () => request<{ authenticated: boolean; user: string | null; auth_disabled?: boolean }>("/auth/whoami"),
+  login: (user: string, password: string) =>
+    request<{ ok: boolean; user?: string }>("/auth/login", { method: "POST", json: { user, password } }),
+  thermal: () => request<ThermalConfig>("/system/thermal"),
+  setThermal: (cfg: Partial<ThermalConfig>) =>
+    request<{ ok: boolean; config: ThermalConfig }>("/system/thermal", { method: "PUT", json: cfg }),
 
   // Setup wizard
   setupStatus: () => request<{
@@ -365,10 +385,25 @@ export interface NotifChannel {
 export interface MeteorConfig {
   enabled: boolean;
   poll_interval_minutes: number;
+  alert_cooldown_minutes?: number;
   min_streak_length: number;
   include_snapshot: boolean;
   include_timelapse: boolean;
   [k: string]: unknown;
+}
+
+export interface ThermalConfig {
+  enabled: boolean;
+  warn_c: number;
+  stop_c: number;
+  resume_c: number;
+  poll_seconds: number;
+  warm_extra_delay_ms: number;
+  state?: string;
+  temp_c?: number | null;
+  message?: string;
+  skip_processing?: boolean;
+  extra_delay_ms?: number;
 }
 
 export interface FocusConfig {

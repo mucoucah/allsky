@@ -16,6 +16,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 
+from app.allsky.thermal import thermal_monitor
 from app.allsky.watcher import watch_latest_image
 from app.config import get_settings
 from app.db import init_db
@@ -39,6 +40,7 @@ async def lifespan(app: FastAPI):
         watch_latest_image(app.state.broadcaster, app.state.watcher_stop)
     )
     # Alert watchers (meteor detection + focus monitoring + rain detection + ADS-B).
+    app.state.thermal_task = asyncio.create_task(thermal_monitor(app.state.watcher_stop))
     app.state.meteor_task = asyncio.create_task(meteor_watcher(app.state.watcher_stop))
     app.state.focus_task = asyncio.create_task(focus_watcher(app.state.watcher_stop))
     app.state.rain_task = asyncio.create_task(rain_watcher(app.state.watcher_stop))
@@ -51,6 +53,7 @@ async def lifespan(app: FastAPI):
         app.state.watcher_stop.set()
         for task in (
             app.state.watcher_task,
+            app.state.thermal_task,
             app.state.meteor_task,
             app.state.focus_task,
             app.state.rain_task,
@@ -65,11 +68,41 @@ async def lifespan(app: FastAPI):
         log.info("shutdown complete")
 
 
+class RequireAuthMiddleware:
+    """Reject unauthenticated /api calls when a password hash is configured.
+
+    The SPA itself stays reachable so the login page can load. SessionMiddleware
+    is added after this one so it runs first and fills scope["session"].
+    """
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] == "http":
+            path = scope.get("path", "")
+            if path.startswith("/api") and path not in (
+                "/api/health",
+                "/api/auth/login",
+                "/api/auth/logout",
+                "/api/auth/whoami",
+            ):
+                from app.routers.auth import auth_required
+                session = scope.get("session") or {}
+                if auth_required() and not session.get("user"):
+                    from starlette.responses import JSONResponse
+                    response = JSONResponse({"detail": "authentication required"}, status_code=401)
+                    await response(scope, receive, send)
+                    return
+        await self.app(scope, receive, send)
+
+
 def create_app() -> FastAPI:
     s = get_settings()
     from app import __version__
     app = FastAPI(title="allsky-web", version=__version__, lifespan=lifespan)
 
+    app.add_middleware(RequireAuthMiddleware)
     app.add_middleware(SessionMiddleware, secret_key=s.session_secret, https_only=False)
     if s.cors_origins:
         app.add_middleware(

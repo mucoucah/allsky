@@ -170,6 +170,18 @@ int RPicapture(config cg, cv::Mat *image)
 		}
 		if (ss.str() != "") command += " --timeout " + ss.str();
 		command += " --nopreview";
+		// --immediate skips the preview/AE settle that --timeout otherwise waits
+		// out. Safe on Bullseye and Bookworm libcamera (rpicam-still / libcamera-still).
+		// Not used for raspistill: isLibcamera is false there, and --immediate hung
+		// exposures on Buster. Also skipped when libcamera itself is doing AE
+		// (--shutter 0), because that path still needs a moment to settle.
+		// A long-lived camera process would avoid the per-frame startup cost
+		// entirely; that is left as a follow-up.
+		if (cg.isLibcamera &&
+			!(cg.currentAutoExposure && myModeMeanSetting.meanAuto == MEAN_AUTO_OFF))
+		{
+			command += " --immediate";
+		}
 	}
 
 	// https://www.raspberrypi.com/documentation/accessories/camera.html#raspistill
@@ -874,6 +886,26 @@ myModeMeanSetting.modeMean = CG.myModeMeanSetting.modeMean;
 		// Wait for switch day time -> night time or night time -> day time
 		while (bMain && lastDayOrNight == dayOrNight)
 		{
+			// Above ~80 C the thermal guard asks capture to wait. The web
+			// service also stops this process; this loop is the backup so a
+			// frame is not started while the CPU is still hot.
+			bool thermalPaused = false;
+			bool thermalSkip = false;
+			static bool thermalAnnounced = false;
+			(void) readThermalGuard(CG.allskyHome, &thermalPaused, &thermalSkip);
+			if (thermalPaused) {
+				if (!thermalAnnounced) {
+					Log(1, "Thermal guard: capture paused until the CPU cools\n");
+					thermalAnnounced = true;
+				}
+				sleep(15);
+				continue;
+			}
+			if (thermalAnnounced) {
+				Log(1, "Thermal guard: capture resumed\n");
+				thermalAnnounced = false;
+			}
+
 			// date/time is added to many log entries to make it easier to associate them
 			// with an image (which has the date/time in the filename).
 			exposureStartDateTime = getTimeval();
@@ -946,7 +978,7 @@ myModeMeanSetting.modeMean = CG.myModeMeanSetting.modeMean;
 						myRaspistillSetting.analoggain = CG.currentGain;
 					}
 
-					if (CG.currentSkipFrames == 0 &&
+					if (!thermalSkip && CG.currentSkipFrames == 0 &&
 						CG.overlay.overlayMethod == OVERLAY_METHOD_LEGACY &&
 						doOverlay(pRgb, CG, bufTime, 0) > 0)
 					{

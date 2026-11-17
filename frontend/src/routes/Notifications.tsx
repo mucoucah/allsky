@@ -247,9 +247,10 @@ export function MeteorSection() {
         <Radar size={20} /> Meteor / streak detection
       </h2>
       <p className="text-xs text-ink-dim mb-3">
-        Runs Canny edge detection + Hough Line Transform on each captured frame.
-        When bright linear streaks (meteors / falling stars) are found, sends an
-        alert with the annotated image through your notification channels.
+        On each new night frame: grayscale, half size, mask, then subtract the
+        previous frames so stars and streaks that last more than one exposure
+        are dropped. Hits are saved under html/allsky/meteors/. Alerts are
+        rate-limited.
       </p>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -264,9 +265,9 @@ export function MeteorSection() {
           onChange={(v) => setDraft({ ...d, min_streak_length: v })}
         />
         <NumberField
-          label="Poll interval (min)"
-          value={Number(d.poll_interval_minutes ?? 15)}
-          onChange={(v) => setDraft({ ...d, poll_interval_minutes: v })}
+          label="Alert cooldown (min)"
+          value={Number(d.alert_cooldown_minutes ?? 10)}
+          onChange={(v) => setDraft({ ...d, alert_cooldown_minutes: v })}
         />
         <ToggleField
           label="Include timelapse"

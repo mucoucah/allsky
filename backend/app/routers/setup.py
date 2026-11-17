@@ -161,10 +161,11 @@ async def enable_camera():
     # libcamera doesn't need this. We try both approaches.
     results = []
 
-    # Method 1: dtoverlay in /boot/config.txt (for libcamera on Bookworm).
+    # Method 1: legacy camera interface. The sudoers rule allows only this
+    # raspi-config subcommand, not "nonint *".
     try:
         proc = await asyncio.create_subprocess_exec(
-            "sudo", "-n", "raspi-config", "nonint", "do_camera", "0",
+            "sudo", "-n", "/usr/bin/raspi-config", "nonint", "do_camera", "0",
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
@@ -177,41 +178,23 @@ async def enable_camera():
     except (FileNotFoundError, asyncio.TimeoutError) as e:
         results.append({"method": "raspi-config", "error": str(e)})
 
-    # Method 2: Ensure camera_auto_detect=1 in config.txt (Bookworm default).
-    # We need sudo to write to /boot/config.txt.
-    config_paths = ["/boot/firmware/config.txt", "/boot/config.txt"]
-    for cfg_path in config_paths:
-        try:
-            with open(cfg_path) as f:
-                content = f.read()
-            if "camera_auto_detect" not in content:
-                # Use sudo tee -a to append (service user can't write to /boot directly).
-                try:
-                    proc = await asyncio.create_subprocess_exec(
-                        "sudo", "-n", "tee", "-a", cfg_path,
-                        stdin=asyncio.subprocess.PIPE,
-                        stdout=asyncio.subprocess.DEVNULL,
-                        stderr=asyncio.subprocess.PIPE,
-                    )
-                    await asyncio.wait_for(
-                        proc.communicate(input=b"\ncamera_auto_detect=1\n"),
-                        timeout=10,
-                    )
-                    results.append({
-                        "method": "config.txt", "path": cfg_path,
-                        "added": proc.returncode == 0,
-                        "error": None if proc.returncode == 0 else "sudo write failed",
-                    })
-                except Exception as e:
-                    results.append({"method": "config.txt", "path": cfg_path, "error": str(e)})
-            else:
-                results.append({"method": "config.txt", "path": cfg_path, "already_set": True})
-            break
-        except FileNotFoundError:
-            continue
-        except PermissionError:
-            results.append({"method": "config.txt", "path": cfg_path, "error": "permission denied reading"})
-            continue
+    # Method 2: camera_auto_detect=1 via the allow-listed boot-config helper.
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "sudo", "-n", "/usr/local/sbin/allsky-boot-config", "enable-camera-autodetect",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=10)
+        results.append({
+            "method": "config.txt",
+            "exit_code": proc.returncode,
+            "output": (stdout + stderr).decode(errors="replace").strip(),
+            "added": proc.returncode == 0 and b"appended" in (stdout or b""),
+            "error": None if proc.returncode == 0 else "boot config update failed",
+        })
+    except (FileNotFoundError, asyncio.TimeoutError) as e:
+        results.append({"method": "config.txt", "error": str(e)})
 
     needs_reboot = any(r.get("added") for r in results)
     return {
@@ -226,7 +209,7 @@ async def reboot():
     """Reboot the Pi. Used after enabling camera interface."""
     try:
         proc = await asyncio.create_subprocess_exec(
-            "sudo", "-n", "reboot",
+            "sudo", "-n", "/usr/sbin/reboot",
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )

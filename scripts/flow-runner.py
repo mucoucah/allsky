@@ -146,6 +146,18 @@ if __name__ == "__main__":
     except:
         shared.log(0, f"ERROR: Failed to open {shared.SETTINGS_FILE}", exitCode=1)
 
+    def _thermal_skip_processing():
+        tmp = os.environ.get("ALLSKY_TMP", "")
+        if not tmp:
+            return False
+        path = os.path.join(tmp, "thermal_guard")
+        try:
+            with open(path) as fh:
+                parts = fh.read().split()
+        except OSError:
+            return False
+        return len(parts) >= 3 and parts[2] == "1"
+
     flowName = shared.args.tod if shared.args.event == "postcapture" else shared.args.event
     shared.log(4, f"INFO: ===== Running {flowName} flow...")
     moduleConfig = f"{shared.args.ALLSKY_MODULES}/postprocessing_{flowName}.json"
@@ -178,6 +190,12 @@ if __name__ == "__main__":
                         shared.log(3, f"WARNING: Attempted to clear module data for {moduleName} but no function provided.")
 
             os.remove(disableFile)
+
+    if shared.args.event == "postcapture" and _thermal_skip_processing():
+        for step in shared.flow:
+            if shared.flow[step].get("module") == "allsky_overlay.py":
+                shared.flow[step]["enabled"] = False
+                shared.log(1, "INFO: Thermal guard: skipping overlay")
 
     results = {}
     if moduleDebug:

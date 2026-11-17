@@ -38,6 +38,14 @@ async def latest_meta():
 
 @router.websocket("/ws")
 async def live_ws(ws: WebSocket):
+    from app.routers.auth import auth_required
+
+    if auth_required():
+        session = ws.scope.get("session") or {}
+        if not session.get("user"):
+            await ws.accept()
+            await ws.close(code=4401)
+            return
     broadcaster = ws.app.state.broadcaster
     await ws.accept()
     client = await broadcaster.register(ws)

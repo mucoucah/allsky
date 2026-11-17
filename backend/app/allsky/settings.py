@@ -52,24 +52,31 @@ PLACEHOLDER_DEFAULTS: dict[str, Any] = {
     # ── Auto-exposure / auto-gain ──
     "dayautogain": True,
     "nightautogain": True,
-    # Max auto-exposure in ms.
+    # Max auto-exposure in milliseconds (the capture binary multiplies by 1000).
     "daymaxautoexposure": 10_000,
-    "nightmaxautoexposure": 90_000,  # 90 sec — more time for night exposures
+    # IMX462 night: cap auto exposure around 10 s so frames stay frequent
+    # enough for meteors and the Pi 4 does not cook itself on 60-90 s shots.
+    "nightmaxautoexposure": 10_000,
     "daymaxautogain": 10,
-    "nightmaxautogain": 30,
+    # Stay inside the IMX462 analogue range. See NIGHT_GAIN_NOTE below.
+    "nightmaxautogain": 29,
 
-    # ── Exposure in us ──
-    "dayexposure": 300_000,        # 300 ms
-    "nightexposure": 20_000_000,   # 20 sec
+    # Exposure is milliseconds, not microseconds. 8000 = 8 s manual night exposure.
+    "dayexposure": 300,            # 300 ms
+    "nightexposure": 8_000,        # 8 s
 
-    # ── Gain ──
-    # Night needs HIGH gain to capture stars. Day needs low to avoid blowout.
+    # ── Gain (libcamera --analoggain, a linear factor, not dB) ──
+    # Sony IMX462 on the Pi imx290/imx462 driver: gain codes 0-98 in 0.3 dB
+    # steps. libcamera converts that with 10^(0.015 * code), so the maximum
+    # analogue gain is about 29.51 (29.4 dB). rpicam-still accepts a higher
+    # --analoggain and applies the excess as ISP digital gain, which amplifies
+    # noise and is not useful for meteors. 16 is ~24 dB: high, still analogue.
     "daygain": 1,
-    "nightgain": 10,      # was 1 — too low for actual night sky
+    "nightgain": 16,
 
     # ── Delay between images (ms) ──
     "daydelay": 10_000,   # 10 sec
-    "nightdelay": 10_000,  # 10 sec
+    "nightdelay": 500,    # 0.5 s — meteor frames should not wait around
 
     # ── White balance (RPi typical values) ──
     "daywbr": 2.5,   # Red channel
@@ -106,9 +113,11 @@ PLACEHOLDER_DEFAULTS: dict[str, Any] = {
     "imagecropright": 0,
 
     # ── Resize / timelapse resolution (0 = use native) ──
+    # End-of-night timelapse width is the IMX462 native 1920. The encoder
+    # scales down wider frames and never upscales smaller ones.
     "imageresizeuploadswidth": 0,
     "imageresizeuploadsheight": 0,
-    "timelapsewidth": 0,
+    "timelapsewidth": 1920,
     "timelapseheight": 0,
     "minitimelapsewidth": 0,
     "minitimelapseheight": 0,
@@ -159,11 +168,11 @@ PLACEHOLDER_MAXES: dict[str, Any] = {
     "daymaxautoexposure": 60_000,
     "nightmaxautoexposure": 240_000,   # 4 min max
     # Exposure
-    "dayexposure": 60_000_000,       # 60 sec
-    "nightexposure": 240_000_000,    # 4 min
-    # Gain (ISO-style, upstream typical is 0-32)
-    "daygain": 32.0, "nightgain": 32.0,
-    "daymaxautogain": 32.0, "nightmaxautogain": 32.0,
+    "dayexposure": 60_000,           # 60 sec, in milliseconds
+    "nightexposure": 240_000,        # 4 min, in milliseconds
+    # IMX462 analogue ceiling is ~29.51. Values above that become digital gain.
+    "daygain": 16.0, "nightgain": 29.5,
+    "daymaxautogain": 16.0, "nightmaxautogain": 29.5,
     # Delay: 1 hour
     "daydelay": 3_600_000, "nightdelay": 3_600_000,
     # White balance

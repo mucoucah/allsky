@@ -240,6 +240,13 @@ async def setup_initial_config(
         "daytimeoverlay": overlay_file,
         "nighttimeoverlay": overlay_file,
     })
+    # IMX462-oriented night defaults. setdefault keeps a value the user already saved.
+    from .settings import PLACEHOLDER_DEFAULTS
+    for key in (
+        "nightmaxautoexposure", "nightexposure", "nightgain", "nightmaxautogain",
+        "nightdelay", "timelapsewidth", "timelapseheight", "contrast", "sharpness",
+    ):
+        settings.setdefault(key, PLACEHOLDER_DEFAULTS[key])
 
     # Write to both web config and allsky home copies.
     save_values(settings)
@@ -309,21 +316,17 @@ async def install_camera_overlay(sensor: str) -> dict[str, Any]:
     if not cfg:
         return {"ok": False, "error": "Boot config.txt not found"}
 
-    # Write via sudo tee -a.
-    overlay_line = f"\n# Allsky camera ({info['label']})\n{info['overlay']}\n"
+    # The helper only appends an allow-listed overlay. sudoers permits that
+    # command and nothing else in the boot config.
     try:
         proc = await asyncio.create_subprocess_exec(
-            "sudo", "-n", "tee", "-a", str(cfg),
-            stdin=asyncio.subprocess.PIPE,
-            stdout=asyncio.subprocess.DEVNULL,
+            "sudo", "-n", "/usr/local/sbin/allsky-boot-config", "add-overlay", sensor,
+            stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
-        _, stderr = await asyncio.wait_for(
-            proc.communicate(input=overlay_line.encode()),
-            timeout=10,
-        )
+        _, stderr = await asyncio.wait_for(proc.communicate(), timeout=10)
         if proc.returncode != 0:
-            return {"ok": False, "error": f"sudo tee failed: {stderr.decode(errors='replace')}"}
+            return {"ok": False, "error": f"boot config update failed: {stderr.decode(errors='replace')}"}
     except Exception as e:
         return {"ok": False, "error": str(e)}
 
