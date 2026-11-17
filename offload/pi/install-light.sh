@@ -23,7 +23,7 @@ REAL_GROUP="$(id -gn "${REAL_USER}" 2>/dev/null || echo "${REAL_USER}")"
 echo "==> Light client packages (no Node, ffmpeg, ImageMagick, or web UI)"
 apt-get update -qq
 apt-get install -y -qq \
-  python3 rsync openssh-client jq \
+  python3 rsync openssh-client jq gawk \
   libcamera-apps \
   libopencv-dev libusb-1.0-0-dev pkg-config g++ make git \
   iw
@@ -65,11 +65,22 @@ mkdir -p "${ALLSKY_HOME}"/{tmp,config,images,darks,bin,logs}
 mkdir -p /var/lib/allsky/outbox
 chown -R "${REAL_USER}:${REAL_GROUP}" /var/lib/allsky "${ALLSKY_HOME}"
 
+# Same catalog the full install copies. capture and allsky.sh both need it
+# (get_model_from_sensor / showSupportedCameras). Without it, gawk reports
+# the file missing and the camera-change check treats "imx290" as a new camera.
+for repo_file in RPi_cameraInfo.txt env.json autoexposure.json; do
+  src="${ALLSKY_HOME}/config_repo/${repo_file}.repo"
+  dest="${ALLSKY_HOME}/config/${repo_file}"
+  if [[ -f "${src}" && ( ${repo_file} == "RPi_cameraInfo.txt" || ! -f "${dest}" ) ]]; then
+    cp "${src}" "${dest}"
+  fi
+done
+
 if [[ ! -f "${ALLSKY_HOME}/config/settings.json" ]]; then
   cat > "${ALLSKY_HOME}/config/settings.json" <<'JSON'
 {
   "cameratype": "RPi",
-  "cameramodel": "imx462",
+  "cameramodel": "imx290",
   "cameranumber": "0",
   "filename": "image.jpg",
   "quality": 90,
@@ -102,7 +113,38 @@ data.setdefault("outbox_dir", "/var/lib/allsky/outbox")
 dest.write_text(json.dumps(data, indent=2) + "\n")
 PY
 fi
+
+# Store the camera-info model ("imx290 60.00 fps"), not the bare sensor or "imx462".
+# A value that already has a space is left alone, so a tuned full install is kept.
+if [[ -f "${ALLSKY_HOME}/config/settings.json" && -f "${ALLSKY_HOME}/config/RPi_cameraInfo.txt" ]]; then
+  python3 - <<PY
+import json
+from pathlib import Path
+info_path = Path("${ALLSKY_HOME}/config/RPi_cameraInfo.txt")
+settings_path = Path("${ALLSKY_HOME}/config/settings.json")
+settings = json.loads(settings_path.read_text())
+model = settings.get("cameramodel", "")
+if model and " " not in str(model):
+    lookup = "imx290" if model == "imx462" else model
+    for line in info_path.read_text().splitlines():
+        if not line.startswith("camera\t"):
+            continue
+        parts = line.split("\t")
+        if len(parts) >= 4 and parts[1].strip() == lookup:
+            settings["cameramodel"] = parts[3].strip()
+            print(f"    Fixed cameramodel: {model} -> {settings['cameramodel']}")
+            settings_path.write_text(json.dumps(settings, indent=4) + "\n")
+            break
+cn = settings.get("cameranumber")
+if isinstance(cn, int):
+    settings["cameranumber"] = str(cn)
+    settings_path.write_text(json.dumps(settings, indent=4) + "\n")
+PY
+fi
 chown "${REAL_USER}:${REAL_GROUP}" "${ALLSKY_HOME}/config/offload.json" "${ALLSKY_HOME}/config/settings.json"
+if [[ -f "${ALLSKY_HOME}/config/RPi_cameraInfo.txt" ]]; then
+  chown "${REAL_USER}:${REAL_GROUP}" "${ALLSKY_HOME}/config/RPi_cameraInfo.txt"
+fi
 
 ALLSKY_TMP="${ALLSKY_HOME}/tmp"
 mkdir -p "${ALLSKY_TMP}"
@@ -194,8 +236,13 @@ chmod 0440 /etc/sudoers.d/allsky-light
 chmod 0755 "${ALLSKY_HOME}/offload/pi/wifi-powersave.sh" "${ALLSKY_HOME}/offload/pi/pi-heat.sh"
 systemctl daemon-reload
 systemctl enable allsky.service allsky-sync.service allsky-thermal.service allsky-wifi-powersave.service
-systemctl start allsky-thermal.service allsky-wifi-powersave.service || true
-systemctl start allsky-sync.service || true
+systemctl restart allsky-thermal.service allsky-wifi-powersave.service || true
+# Restart sync so a re-run picks up rsync/ssh changes. allsky itself is left
+# stopped on a first install until offload.json has the PC host.
+systemctl restart allsky-sync.service || true
+if systemctl is-active --quiet allsky.service || systemctl is-failed --quiet allsky.service; then
+  systemctl restart allsky.service || true
+fi
 
 echo
 echo "Light client installed. The web UI is not running on this Pi."

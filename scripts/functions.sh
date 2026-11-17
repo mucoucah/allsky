@@ -116,6 +116,12 @@ function doExit()
 		OUTPUT_A_MSG="true"
 	fi
 
+	# Capture-only has no ImageMagick and no web notification images.
+	local SKIP_IMAGES="false"
+	if [[ -f ${ALLSKY_HOME}/offload/mode.py ]] && python3 "${ALLSKY_HOME}/offload/mode.py" --quiet; then
+		SKIP_IMAGES="true"
+	fi
+
 	if [[ ${EXITCODE} -ge ${EXIT_ERROR_STOP} ]]; then
 		# With fatal EXIT_ERROR_STOP errors, we can't continue so display a notification image
 		# even if the user has them turned off.
@@ -123,15 +129,19 @@ function doExit()
 			# Create a custom error message.
 			# If we error out before variables.sh is sourced in,
 			# ${FILENAME} and ${EXTENSION} won't be set so guess at what they are.
-			"${ALLSKY_SCRIPTS}/generateNotificationImages.sh" --directory "${ALLSKY_TMP}" \
-				"${FILENAME:-"image"}" \
-				"${COLOR}" "" "85" "" "" \
-				"" "10" "${COLOR}" "${EXTENSION:-"jpg"}" "" "${CUSTOM_MESSAGE}"
+			if [[ ${SKIP_IMAGES} == "false" ]]; then
+				"${ALLSKY_SCRIPTS}/generateNotificationImages.sh" --directory "${ALLSKY_TMP}" \
+					"${FILENAME:-"image"}" \
+					"${COLOR}" "" "85" "" "" \
+					"" "10" "${COLOR}" "${EXTENSION:-"jpg"}" "" "${CUSTOM_MESSAGE}"
+			fi
 			echo "Stopping Allsky: ${CUSTOM_MESSAGE}"
 
 		elif [[ ${TYPE} != "no-image" ]]; then
 			[[ ${OUTPUT_A_MSG} == "false" && ${TYPE} == "RebootNeeded" ]] && echo "Reboot needed"
-			"${ALLSKY_SCRIPTS}/copyNotificationImage.sh" --expires 0 "${TYPE}" 2>&1
+			if [[ ${SKIP_IMAGES} == "false" ]]; then
+				"${ALLSKY_SCRIPTS}/copyNotificationImage.sh" --expires 0 "${TYPE}" 2>&1
+			fi
 		fi
 	fi
 
@@ -327,10 +337,14 @@ function get_connected_cameras_info()
 			echo -e "RPi\t0\timx477\t[4056x3040]"
 
 		else
-			# Input:
-			#	camera_number  : sensor  [other stuff]
+			# rpicam-apps 1.15 (Trixie) writes --list-cameras to stdout, with
+			# libcamera logs sometimes mixed in on stderr. The header
+			# ("Available cameras"), the dashed rule, and the indented Modes
+			# lines are not cameras. A camera line looks like:
+			#   0 : imx290 [1920x1080 12-bit RGGB] (/base/soc/i2c0mux/i2c@1/imx290@1a)
+			local PARSER="${ALLSKY_SCRIPTS}/utilities/parseRPiCameraList.awk"
 			LIBCAMERA_LOG_LEVELS=FATAL "${CMD_TO_USE_}" --list-cameras 2>&1 |
-				gawk '/^[0-9]/ { printf("%s\t%d\t%s\n", "RPi", $1, $3); }'
+				gawk -f "${PARSER}"
 		fi
 	fi
 
@@ -426,7 +440,13 @@ function get_connected_camera_models()
 				}
 			} else {
 				sensor = $3;
-				"getModelFromSensor.sh " sensor | getline model;
+				model = "";
+				# Missing RPi_cameraInfo.txt makes gawk fail; keep the sensor name.
+				cmd = "getModelFromSensor.sh " sensor " 2>/dev/null";
+				if ((cmd | getline model) <= 0 || model == "" || model ~ /^(unknown_sensor_|ERROR:)/) {
+					model = sensor;
+				}
+				close(cmd);
 				if (FULL == "true") {
 					printf("%s\t%d\t%s\t%s\n", $1, $2, model, sensor);
 				} else {
@@ -480,7 +500,7 @@ function validate_camera()
 			"${ALLSKY_SCRIPTS}/addMessage.sh" --type error --msg "${MSG}" --url "${URL}"
 		fi
 		RET=1
-	elif [[ ${SETTINGS_CM} != "${CM}" ]]; then
+	elif ! camera_models_match "${CT}" "${SETTINGS_CM}" "${CM}"; then
 		MSG="The Camera Model unexpectedly changed from '${SETTINGS_CM}' to '${CM}'."
 		MSG+="\nGo to the 'Allsky Settings' page of the WebUI and"
 		MSG+=" change the 'Camera Model' to '${CM}' then save the settings."
@@ -1419,6 +1439,36 @@ function get_allsky_status_timestamp()
 	settings ".timestamp" "${ALLSKY_STATUS}" 2> /dev/null
 }
 
+
+####
+# Sensor token used to compare camera models.
+# "imx290 60.00 fps" (older settings) and "imx290" (libcamera) are the same sensor.
+# An IMX462 module is enumerated by libcamera as imx290.
+function camera_sensor_token()
+{
+	local value="${1:-}"
+	local token="${value%% *}"
+	token="${token,,}"
+	if [[ ${token} == "imx462" ]]; then
+		token="imx290"
+	fi
+	echo "${token}"
+}
+
+####
+# True when two model strings name the same camera.
+# ZWO names stay exact. RPi compares the sensor token only.
+function camera_models_match()
+{
+	local CT="${1}"
+	local LEFT="${2}"
+	local RIGHT="${3}"
+	if [[ ${CT} == "RPi" ]]; then
+		[[ -n ${LEFT} && $( camera_sensor_token "${LEFT}" ) == "$( camera_sensor_token "${RIGHT}" )" ]]
+		return
+	fi
+	[[ ${LEFT} == "${RIGHT}" ]]
+}
 
 ####
 # Get the RPi camera model given its sensor name.
