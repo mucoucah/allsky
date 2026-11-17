@@ -254,11 +254,13 @@ for settings_path in paths:
         # Fix model name: sensor only -> full model from camera info.
         model = settings.get('cameramodel', '')
         if model and ' ' not in model:
+            # IMX462 modules are reported by libcamera as imx290.
+            lookup = 'imx290' if model == 'imx462' else model
             with open(info_path) as f:
                 for line in f:
                     if line.startswith('camera\t'):
                         parts = line.split('\t')
-                        if len(parts) >= 4 and parts[1].strip() == model:
+                        if len(parts) >= 4 and parts[1].strip() == lookup:
                             settings['cameramodel'] = parts[3].strip()
                             changed = True
                             print(f'    Fixed cameramodel in {settings_path}: {model} -> {settings[\"cameramodel\"]}')

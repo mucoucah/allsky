@@ -214,6 +214,14 @@ if [[ -f ${ALLSKY_POST_INSTALL_ACTIONS} ]]; then
 fi
 
 # Get the list of connected cameras and make sure the one we want is connected.
+# CSI cameras have no USB reset. The ZWO branch replaces this stub.
+reset_usb()
+{
+	local REASON="${1:-}"
+	echo "WARNING: reset_usb skipped (${REASON//\\n/ }); not a ZWO camera." >&2
+	return 0
+}
+
 if [[ ${CAMERA_TYPE} == "ZWO" ]]; then
 	RPi_COMMAND_TO_USE=""
 	RESETTING_USB_LOG="${ALLSKY_TMP}/resetting_USB.txt"
@@ -307,28 +315,58 @@ if [[ ${CAMERA_TYPE_FOUND} == "false" ]]; then
 fi
 
 # Make sure the current camera is supported and hasn't changed unexpectedly.
-CAM="${CAMERA_TYPE}	${CAMERA_NUMBER}	${CAMERA_MODEL}"	# has TABS
+# Compare the sensor name only. Older installs stored "imx290 60.00 fps"
+# while libcamera reports "imx290".
 CCM="$( get_connected_camera_models --full "${CAMERA_TYPE}" )"
-#shellcheck disable=SC2076
-if [[ ! ${CCM} =~ "${CAM}" ]]; then
-	IFS="	" read -r CC_TYPE CC_NUMBER CC_MODEL CC_OTHER <<<"${CCM}"
+CAMERA_SAME="false"
+if [[ ${CAMERA_TYPE} == "RPi" ]]; then
+	STORED_SENSOR="$( camera_sensor_token "${CAMERA_MODEL}" )"
+	while IFS=$'\t' read -r CC_TYPE CC_NUMBER CC_MODEL CC_SENSOR; do
+		[[ -z ${CC_TYPE} ]] && continue
+		[[ ${CC_TYPE} != "${CAMERA_TYPE}" || ${CC_NUMBER} != "${CAMERA_NUMBER}" ]] && continue
+		DETECTED="$( camera_sensor_token "${CC_SENSOR:-${CC_MODEL}}" )"
+		if [[ -n ${STORED_SENSOR} && ${STORED_SENSOR} == "${DETECTED}" ]]; then
+			CAMERA_SAME="true"
+			break
+		fi
+		DETECTED="$( camera_sensor_token "${CC_MODEL}" )"
+		if [[ -n ${STORED_SENSOR} && ${STORED_SENSOR} == "${DETECTED}" ]]; then
+			CAMERA_SAME="true"
+			break
+		fi
+	done <<< "${CCM}"
+else
+	CAM="${CAMERA_TYPE}	${CAMERA_NUMBER}	${CAMERA_MODEL}"	# has TABS
+	#shellcheck disable=SC2076
+	[[ ${CCM} =~ "${CAM}" ]] && CAMERA_SAME="true"
+fi
+if [[ ${CAMERA_SAME} == "false" ]]; then
+	IFS=$'\t' read -r CC_TYPE CC_NUMBER CC_MODEL CC_OTHER <<< "${CCM}"
 	echo -e "Was: ${CAMERA_TYPE} ${CAMERA_NUMBER} ${CAMERA_MODEL}"
 	echo -e "Now: ${CC_TYPE} ${CC_NUMBER} ${CC_MODEL} ${CC_OTHER}"
 	# Something changed.  validate_camera() displays the error message.
-	if ! validate_camera "${CC_TYPE}" "${CC_MODEL}" "${CC_NUMBER}" ; then
+	if ! validate_camera "${CC_TYPE}" "${CC_MODEL:-${CC_OTHER}}" "${CC_NUMBER}" ; then
 		set_allsky_status "${ALLSKY_STATUS_CAMERA_CHANGED}"
 		IMAGE_MSG="${ERROR_MSG_PREFIX}"
 		IMAGE_MSG+="The camera changed."
 		IMAGE_MSG+="\nCheck Camera Type\n& Model in the WebUI."
-		reset_usb "Camera changed"
+		# reset_usb is only defined for ZWO; a CSI camera has no USB bus to reset.
+		[[ ${CAMERA_TYPE} == "ZWO" ]] && reset_usb "Camera changed"
 		doExit "${EXIT_ERROR_STOP}" "Error" "${IMAGE_MSG}"
 	fi
 fi
 
 # Make sure the settings file is linked to the camera-specific file.
 if ! MSG="$( check_settings_link "${SETTINGS_FILE}" )" ; then
-	"${ALLSKY_SCRIPTS}/addMessage.sh" --type error --cmd "${MSG}"
+	"${ALLSKY_SCRIPTS}/addMessage.sh" --type error --msg "${MSG}"
 	E_ "ERROR: ${MSG}" >&2
+fi
+
+# Capture-only skips ImageMagick notification images, the web-server group,
+# and the module runner.
+OFFLOAD_CAPTURE_ONLY=false
+if [[ -f ${ALLSKY_HOME}/offload/mode.py ]] && python3 "${ALLSKY_HOME}/offload/mode.py" --quiet; then
+	OFFLOAD_CAPTURE_ONLY=true
 fi
 
 # Make directories that need to exist.
@@ -340,7 +378,9 @@ else
 	# but "just in case"...
 	mkdir -p "${ALLSKY_TMP}"
 	chmod 775 "${ALLSKY_TMP}"
-	sudo chgrp "${WEBSERVER_GROUP}" "${ALLSKY_TMP}"
+	if [[ ${OFFLOAD_CAPTURE_ONLY} == "false" ]]; then
+		sudo chgrp "${WEBSERVER_GROUP}" "${ALLSKY_TMP}"
+	fi
 	MSG="Had to create '${ALLSKY_TMP}'."
 	MSG="${MSG}\nIf this happens again, contact the Allsky developers."
 	"${ALLSKY_SCRIPTS}/addMessage.sh" --type warning --msg "${ME}: ${MSG}"
@@ -351,16 +391,14 @@ rm -f "${ALLSKY_BAD_IMAGE_COUNT}"	# Start with no bad images
 # Clear out these files and allow the web server to write to it.
 rm -fr "${ALLSKY_ABORTS_DIR}"
 mkdir "${ALLSKY_ABORTS_DIR}"
-sudo chgrp "${WEBSERVER_GROUP}" "${ALLSKY_ABORTS_DIR}"
-sudo chmod 775 "${ALLSKY_ABORTS_DIR}"
+if [[ ${OFFLOAD_CAPTURE_ONLY} == "false" ]]; then
+	sudo chgrp "${WEBSERVER_GROUP}" "${ALLSKY_ABORTS_DIR}"
+	sudo chmod 775 "${ALLSKY_ABORTS_DIR}"
+else
+	chmod 775 "${ALLSKY_ABORTS_DIR}"
+fi
 
 rm -f "${ALLSKY_NOTIFICATION_LOG}"	# clear out any notificatons from prior runs.
-
-# Capture-only skips ImageMagick notification images and the module runner.
-OFFLOAD_CAPTURE_ONLY=false
-if [[ -f ${ALLSKY_HOME}/offload/mode.py ]] && python3 "${ALLSKY_HOME}/offload/mode.py" --quiet; then
-	OFFLOAD_CAPTURE_ONLY=true
-fi
 
 # Can do this in the background to speed up startup.
 if [[ ${OFFLOAD_CAPTURE_ONLY} == "false" ]]; then
@@ -445,8 +483,8 @@ if [[ ${RETCODE} -eq ${EXIT_RESTARTING} ]]; then
 fi
 
 if [[ ${RETCODE} -eq ${EXIT_RESET_USB} ]]; then
-	# Reset the USB bus
-	reset_usb " (too many capture errors)"
+	# Reset the USB bus. RPi capture does not return this code; the stub no-ops.
+	[[ ${CAMERA_TYPE} == "ZWO" ]] && reset_usb " (too many capture errors)"
 	if [[ ${ON_TTY} == "true" ]]; then
 		echo "*** USB bus was reset; You can restart allsky now. ***"
 		NOTIFICATION_TYPE="NotRunning"

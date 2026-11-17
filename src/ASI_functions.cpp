@@ -650,17 +650,79 @@ ASI_CONTROL_CAPS ControlCapsArray[][MAX_NUM_CONTROL_CAPS] =
 
 
 
-/* Sample "libcamera-still --list-cameras" ouput:
+/* Sample "libcamera-still --list-cameras" ouput (older):
 	1 : imx477 [4056x3040] (/base/soc/i2c0mux/i2c@1/pca@70/i2c@1/imx477@1a)
     	Modes:	'SRGGB10_CSI2P' : 1332x990
  	          	'SRGGB12_CSI2P' : 2028x1080 2028x1520 4056x3040
+
+	rpicam-apps 1.15 (Trixie) adds a header and a bit depth, still on stdout:
+		Available cameras
+		-----------------
+		0 : imx290 [1920x1080 12-bit RGGB] (/base/soc/i2c0mux/i2c@1/imx290@1a)
+		    Modes: 'SRGGB12_CSI2P' : 1920x1080 [60.00 fps - (0, 0)/1920x1080 crop]
 
 	Where "Modes" is:
 		S<Bayer order><Bit-depth>_<Optional packing> : <Resolution list>
 	Command line:   --mode <width>:<height>:<bit-depth>:<packing>
 		(bit-depth and packing are optional)
 	Some cameras also have additional resolutions for a given mode.
+	allsky.sh parses that list; this function only sees the sensor token it saved.
 */
+
+// First whitespace-separated word, lowercased. "imx290 60.00 fps" -> "imx290".
+static void cameraSensorToken(const char *src, char *dst, size_t dstSize)
+{
+	size_t n = 0;
+	if (dstSize == 0)
+		return;
+	dst[0] = '\0';
+	if (src == NULL)
+		return;
+	while (*src == ' ' || *src == '\t')
+		src++;
+	while (src[n] != '\0' && src[n] != ' ' && src[n] != '\t' && n + 1 < dstSize)
+	{
+		char c = src[n];
+		if (c >= 'A' && c <= 'Z')
+			c = (char)(c - 'A' + 'a');
+		dst[n] = c;
+		n++;
+	}
+	dst[n] = '\0';
+	// IMX462 boards are exposed by the imx290 kernel driver.
+	if (strcmp(dst, "imx462") == 0)
+	{
+		strncpy(dst, "imx290", dstSize - 1);
+		dst[dstSize - 1] = '\0';
+	}
+}
+
+// Settings may store the sensor ("imx290"), the old mode string
+// ("imx290 60.00 fps"), or the friendly name ("HQ").
+static bool sameRPiCamera(const char *cm, const char *name, const char *sensor)
+{
+	char cmTok[CAMERA_NAME_SIZE];
+	char nameTok[CAMERA_NAME_SIZE];
+	char sensorTok[MODULE_SIZE];
+
+	if (cm == NULL || cm[0] == '\0')
+		return false;
+	if (name != NULL && strcmp(name, cm) == 0)
+		return true;
+	if (sensor != NULL && strcmp(sensor, cm) == 0)
+		return true;
+
+	cameraSensorToken(cm, cmTok, sizeof(cmTok));
+	cameraSensorToken(name, nameTok, sizeof(nameTok));
+	cameraSensorToken(sensor, sensorTok, sizeof(sensorTok));
+	if (cmTok[0] == '\0')
+		return false;
+	if (nameTok[0] != '\0' && strcmp(cmTok, nameTok) == 0)
+		return true;
+	if (sensorTok[0] != '\0' && strcmp(cmTok, sensorTok) == 0)
+		return true;
+	return false;
+}
 
 // Get the cameraNumber for the camera we're using.
 // Also save the info on each connected camera of the current type.
@@ -938,9 +1000,10 @@ if (numTokens > 1) Log(5, ", inCamera=%s, inControlCaps=%s, inLibcamera=%s\n", y
 				Log(4, " ControlCapsArray[%d]", actualIndex);
 
 				// Use camera model if we have it.
+				// Name may be "imx290 60.00 fps" while settings (and libcamera) say "imx290".
 				if (CG.cm[0] != '\0')
 				{
- 					if (strcmp(RPiCameras[thisIndex].CameraInfo->Name, CG.cm) == 0)
+ 					if (sameRPiCamera(CG.cm, RPiCameras[thisIndex].CameraInfo->Name, sensor))
 					{
 						RPiCameraIndex = thisIndex;
 						Log(4, " - MATCH on cm=%s\n", CG.cm);

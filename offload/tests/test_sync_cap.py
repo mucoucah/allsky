@@ -15,6 +15,8 @@ from offload.sync import (
     apply_confirmed,
     backoff_seconds,
     bandwidth_kib_per_s,
+    build_rsync_pull,
+    build_rsync_status,
     build_rsync_upload,
     cycle,
     enforce_cap,
@@ -170,10 +172,22 @@ def test_rsync_command_is_resumable_and_limited():
     assert "--partial" in cmd
     assert "--append-verify" in cmd
     assert "--remove-source-files" in cmd
+    assert "--contimeout" not in text
     assert "--bwlimit" in cmd
     assert "100" in cmd  # 800 kbps -> 100 KiB/s
     assert "BatchMode=yes" in text
+    assert "ConnectTimeout=10" in text
+    assert "ServerAliveInterval=15" in text
+    assert "ServerAliveCountMax=3" in text
+    assert "StrictHostKeyChecking=accept-new" in text
+    assert "-p 2222" in text
     assert "allsky@192.168.1.20:/srv/allsky/incoming/" in cmd[-1]
+    status = " ".join(build_rsync_status(remote, Path("/tmp/pi-status.json")))
+    pull = " ".join(build_rsync_pull(remote, Path("/tmp/settings")))
+    assert "--contimeout" not in status
+    assert "--contimeout" not in pull
+    assert "ConnectTimeout=10" in status
+    assert "ConnectTimeout=10" in pull
 
 
 def test_settings_pull_restarts_only_when_changed(tmp_path: Path):
