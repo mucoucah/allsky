@@ -275,11 +275,11 @@ for settings_path in paths:
             'daymean': 0.5, 'nightmean': 0.2,
             'daymeanthreshold': 0.1, 'nightmeanthreshold': 0.1,
             'dayautogain': True, 'nightautogain': True,
-            'daymaxautoexposure': 10000, 'nightmaxautoexposure': 90000,
-            'daymaxautogain': 10, 'nightmaxautogain': 30,
-            'dayexposure': 300000, 'nightexposure': 20000000,
-            'daygain': 1, 'nightgain': 10,
-            'daydelay': 10000, 'nightdelay': 10000,
+            'daymaxautoexposure': 10000, 'nightmaxautoexposure': 10000,
+            'daymaxautogain': 10, 'nightmaxautogain': 29,
+            'dayexposure': 300, 'nightexposure': 8000,
+            'daygain': 1, 'nightgain': 16,
+            'daydelay': 10000, 'nightdelay': 500,
             'daywbr': 2.5, 'daywbb': 2.0, 'nightwbr': 2.5, 'nightwbb': 2.0,
             'saturation': 1.0, 'contrast': 1.0, 'sharpness': 1.0,
             'aggression': 75, 'gaintransitiontime': 5,
@@ -288,7 +288,7 @@ for settings_path in paths:
             'imagecroptop': 0, 'imagecropbottom': 0,
             'imagecropleft': 0, 'imagecropright': 0,
             'imageresizeuploadswidth': 0, 'imageresizeuploadsheight': 0,
-            'timelapsewidth': 0, 'timelapseheight': 0,
+            'timelapsewidth': 1920, 'timelapseheight': 0,
             'minitimelapsewidth': 0, 'minitimelapseheight': 0,
         }
         for k, default_val in placeholders.items():
@@ -297,6 +297,32 @@ for settings_path in paths:
                 settings[k] = default_val
                 changed = True
                 print(f'    Resolved placeholder: {k} = {default_val}')
+        # Move the previous installer defaults onto the IMX462 night profile.
+        # Only an exact match is replaced, so a hand-tuned value is left alone.
+        migrations = {
+            'nightmaxautoexposure': (90000, 10000),
+            'nightexposure': (20000000, 8000),
+            'nightgain': (10, 16),
+            'nightmaxautogain': (30, 29),
+            'nightdelay': (10000, 500),
+            'timelapsewidth': (0, 1920),
+            'dayexposure': (300000, 300),
+        }
+        for k, (old, new) in migrations.items():
+            if settings.get(k) == old or k not in settings:
+                if settings.get(k) != new:
+                    settings[k] = new
+                    changed = True
+                    print(f'    Night/timelapse default: {k} = {new}')
+        # Moderate capture logging. Do not raise an existing quieter level.
+        try:
+            dbg = int(settings.get('debuglevel', 1))
+        except (TypeError, ValueError):
+            dbg = 1
+        if dbg > 2:
+            settings['debuglevel'] = 1
+            changed = True
+            print('    debuglevel lowered to 1')
         # Force-fix the contrast=0/sharpness=0 bug from v1.9.3-v1.9.10
         # These cause rpicam-still to output flat gray images!
         for bad_k in ('contrast', 'sharpness'):
@@ -318,7 +344,7 @@ fi
 
 # Create initial settings.json if missing (first install).
 if [[ ! -f "${ALLSKY_HOME}/config/settings.json" ]]; then
-  echo '{"cameratype":"RPi","cameramodel":"","cameranumber":"0","filename":"image.jpg","debuglevel":"1","lastchanged":"1","daytimeoverlay":"overlay-RPi.json","nighttimeoverlay":"overlay-RPi.json","contrast":1.0,"sharpness":1.0,"saturation":1.0}' \
+  echo '{"cameratype":"RPi","cameramodel":"","cameranumber":"0","filename":"image.jpg","debuglevel":"1","lastchanged":"1","daytimeoverlay":"overlay-RPi.json","nighttimeoverlay":"overlay-RPi.json","contrast":1.0,"sharpness":1.0,"saturation":1.0,"nightmaxautoexposure":10000,"nightexposure":8000,"nightgain":16,"nightmaxautogain":29,"nightdelay":500,"dayexposure":300,"timelapsewidth":1920,"timelapseheight":0}' \
     > "${ALLSKY_HOME}/config/settings.json"
   green "    Created initial settings."
 fi
@@ -357,7 +383,7 @@ User=${SUDO_USER:-pi}
 Environment=ALLSKY_HOME=${ALLSKY_HOME}
 ExecStart=${ALLSKY_HOME}/allsky.sh
 Restart=on-failure
-RestartSec=5
+RestartSec=10
 
 [Install]
 WantedBy=multi-user.target
@@ -447,6 +473,24 @@ chown -R "${REAL_USER}:${REAL_GROUP}" "${ALLSKY_HOME}"
 chmod 755 "${ALLSKY_HOME}" 2>/dev/null || true
 chmod 775 "${ALLSKY_HOME}/tmp" 2>/dev/null || true
 
+# Keep ALLSKY_TMP (variables.sh) in RAM so per-frame JPEGs do not wear the SD card.
+# Idempotent: refresh only a line this installer wrote. A hand-written fstab entry is left alone.
+ALLSKY_TMP="${ALLSKY_HOME}/tmp"
+mkdir -p "${ALLSKY_TMP}"
+if [[ -f /etc/fstab ]] && grep -q '# allsky-web-tmpfs$' /etc/fstab; then
+  sed -i '/# allsky-web-tmpfs$/d' /etc/fstab
+fi
+if [[ -f /etc/fstab ]] && ! grep -Eq "[[:space:]]${ALLSKY_TMP}[[:space:]]" /etc/fstab; then
+  echo "tmpfs ${ALLSKY_TMP} tmpfs size=128M,noatime,lazytime,nodev,nosuid,mode=775,uid=${REAL_USER},gid=${REAL_GROUP} 0 0 # allsky-web-tmpfs" >> /etc/fstab
+  green "    Added 128M tmpfs fstab entry for ${ALLSKY_TMP}."
+else
+  green "    ${ALLSKY_TMP} already has an fstab entry."
+fi
+if command -v findmnt >/dev/null && ! findmnt -n "${ALLSKY_TMP}" >/dev/null 2>&1; then
+  mount "${ALLSKY_TMP}" 2>/dev/null || yellow "    tmpfs will mount on the next boot."
+fi
+systemctl daemon-reload 2>/dev/null || true
+
 # Make config directory and all files world-readable.
 chmod -R o+rX "${ALLSKY_HOME}/config" 2>/dev/null || true
 # Explicitly ensure key files are readable.
@@ -487,6 +531,9 @@ mkdir -p "${INSTALL_PREFIX}/backend"
 rm -rf "${INSTALL_PREFIX}/backend/app" "${INSTALL_PREFIX}/backend/pyproject.toml"
 cp -r "${SCRIPT_DIR}/backend/app" "${INSTALL_PREFIX}/backend/app"
 cp "${SCRIPT_DIR}/backend/pyproject.toml" "${INSTALL_PREFIX}/backend/pyproject.toml"
+cp "${SCRIPT_DIR}/backend/run-web.sh" "${INSTALL_PREFIX}/backend/run-web.sh"
+chmod 755 "${INSTALL_PREFIX}/backend/run-web.sh"
+install -m 0755 "${SCRIPT_DIR}/scripts/allsky-boot-config.sh" /usr/local/sbin/allsky-boot-config
 find "${INSTALL_PREFIX}/backend" -name '__pycache__' -exec rm -rf {} + 2>/dev/null || true
 
 VENV="${INSTALL_PREFIX}/backend/.venv"
@@ -551,6 +598,19 @@ cyan "==> [6/6] Configuring services"
 
 # Environment file.
 mkdir -p /etc/allsky-web
+WEB_AUTH_NOTICE=""
+set_env_key() {
+  local key="$1" value="$2" file="$3"
+  if grep -q "^${key}=" "$file"; then
+    awk -v k="$key" -v v="$value" '
+      BEGIN { FS = OFS = "=" }
+      $1 == k { print k "=" v; next }
+      { print }
+    ' "$file" > "${file}.tmp" && mv "${file}.tmp" "$file"
+  else
+    printf '%s=%s\n' "$key" "$value" >> "$file"
+  fi
+}
 if [[ ! -f "${ENV_FILE}" ]]; then
   SECRET="$(head -c 32 /dev/urandom | base64 | tr -d '=+/' | head -c 44)"
   cat >"${ENV_FILE}" <<ENVEOF
@@ -560,8 +620,11 @@ ALLSKY_WEB_DATA=${DATA_DIR}
 ALLSKY_WEB_SECRET=${SECRET}
 ALLSKY_WEB_HOST=0.0.0.0
 ALLSKY_WEB_PORT=8000
+ALLSKY_WEB_AUTH=1
 ALLSKY_WEB_USER=
 ALLSKY_WEB_PASS_HASH=
+# Set to the reverse-proxy address to trust X-Forwarded-* headers. Leave unset on a direct LAN install. '*' is ignored.
+# ALLSKY_WEB_FORWARDED_ALLOW_IPS=
 ENVEOF
   chmod 640 "${ENV_FILE}"
   chown root:"${REAL_GROUP}" "${ENV_FILE}"
@@ -575,10 +638,44 @@ else
   fi
 fi
 
+# Auth is on unless a username and bcrypt hash are already stored.
+AUTH_USER_NOW="$(grep -m1 '^ALLSKY_WEB_USER=' "${ENV_FILE}" | cut -d= -f2- || true)"
+AUTH_HASH_NOW="$(grep -m1 '^ALLSKY_WEB_PASS_HASH=' "${ENV_FILE}" | cut -d= -f2- || true)"
+if [[ -z "${AUTH_USER_NOW}" || -z "${AUTH_HASH_NOW}" ]]; then
+  if [[ -t 0 ]]; then
+    read -r -p "Web UI username [admin]: " AUTH_USER_NOW
+    AUTH_USER_NOW="${AUTH_USER_NOW:-admin}"
+    read -r -s -p "Web UI password (leave blank to generate one): " AUTH_PASS_NOW
+    echo
+    if [[ -z "${AUTH_PASS_NOW}" ]]; then
+      AUTH_PASS_NOW="$(head -c 18 /dev/urandom | base64 | tr -d '=+/' | head -c 16)"
+      WEB_AUTH_NOTICE="Web UI login: ${AUTH_USER_NOW} / ${AUTH_PASS_NOW}"
+    else
+      WEB_AUTH_NOTICE="Web UI login: ${AUTH_USER_NOW} (password you just entered)"
+    fi
+  else
+    AUTH_USER_NOW="admin"
+    AUTH_PASS_NOW="$(head -c 18 /dev/urandom | base64 | tr -d '=+/' | head -c 16)"
+    WEB_AUTH_NOTICE="Web UI login: ${AUTH_USER_NOW} / ${AUTH_PASS_NOW}"
+  fi
+  AUTH_HASH_NOW="$(ALLSKY_WEB_PASSWORD="${AUTH_PASS_NOW}" "${VENV}/bin/python3" - <<'PY'
+import os
+from passlib.hash import bcrypt
+print(bcrypt.hash(os.environ["ALLSKY_WEB_PASSWORD"]))
+PY
+)"
+  set_env_key ALLSKY_WEB_USER "${AUTH_USER_NOW}" "${ENV_FILE}"
+  set_env_key ALLSKY_WEB_PASS_HASH "${AUTH_HASH_NOW}" "${ENV_FILE}"
+fi
+set_env_key ALLSKY_WEB_AUTH 1 "${ENV_FILE}"
+chmod 640 "${ENV_FILE}"
+
 # Web UI systemd service.
 # Run as the REAL user (not allskyweb) to avoid all home directory permission
 # issues. On Bookworm, home dirs are 700 and PAM resets chmod on login.
 # Running as the file owner eliminates the problem entirely.
+# Restart=on-failure / RestartSec=10 matches config_repo/allsky-web.service.repo.
+# run-web.sh adds --proxy-headers only when ALLSKY_WEB_FORWARDED_ALLOW_IPS is a real proxy address.
 cat >/etc/systemd/system/allsky-web.service <<SVCEOF
 [Unit]
 Description=Allsky modern web interface
@@ -591,26 +688,32 @@ User=${REAL_USER}
 Group=${REAL_GROUP}
 EnvironmentFile=-${ENV_FILE}
 WorkingDirectory=${INSTALL_PREFIX}/backend
-ExecStart=${INSTALL_PREFIX}/backend/.venv/bin/uvicorn app.main:app \
-    --host \${ALLSKY_WEB_HOST} --port \${ALLSKY_WEB_PORT} --proxy-headers \
-    --forwarded-allow-ips='*'
+ExecStart=${INSTALL_PREFIX}/backend/run-web.sh
 Restart=on-failure
-RestartSec=3
+RestartSec=10
 
 [Install]
 WantedBy=multi-user.target
 SVCEOF
 
-# Sudoers — allow web UI user to control services, enable camera, reboot, and shutdown.
+# Sudoers — only the commands the web UI actually runs.
+install -m 0755 "${SCRIPT_DIR}/scripts/allsky-boot-config.sh" /usr/local/sbin/allsky-boot-config
 cat >/etc/sudoers.d/allsky-web <<SUDOEOF
 ${REAL_USER} ALL=(root) NOPASSWD: /usr/bin/systemctl start allsky.service
 ${REAL_USER} ALL=(root) NOPASSWD: /usr/bin/systemctl stop allsky.service
 ${REAL_USER} ALL=(root) NOPASSWD: /usr/bin/systemctl restart allsky.service
-${REAL_USER} ALL=(root) NOPASSWD: /usr/bin/raspi-config nonint *
+${REAL_USER} ALL=(root) NOPASSWD: /usr/bin/raspi-config nonint do_camera 0
 ${REAL_USER} ALL=(root) NOPASSWD: /usr/sbin/reboot
 ${REAL_USER} ALL=(root) NOPASSWD: /usr/sbin/shutdown -h now
-${REAL_USER} ALL=(root) NOPASSWD: /usr/bin/tee /boot/config.txt
-${REAL_USER} ALL=(root) NOPASSWD: /usr/bin/tee /boot/firmware/config.txt
+${REAL_USER} ALL=(root) NOPASSWD: /usr/local/sbin/allsky-boot-config enable-camera-autodetect
+${REAL_USER} ALL=(root) NOPASSWD: /usr/local/sbin/allsky-boot-config add-overlay imx290
+${REAL_USER} ALL=(root) NOPASSWD: /usr/local/sbin/allsky-boot-config add-overlay imx462
+${REAL_USER} ALL=(root) NOPASSWD: /usr/local/sbin/allsky-boot-config add-overlay imx477
+${REAL_USER} ALL=(root) NOPASSWD: /usr/local/sbin/allsky-boot-config add-overlay imx708
+${REAL_USER} ALL=(root) NOPASSWD: /usr/local/sbin/allsky-boot-config add-overlay imx219
+${REAL_USER} ALL=(root) NOPASSWD: /usr/local/sbin/allsky-boot-config add-overlay ov5647
+${REAL_USER} ALL=(root) NOPASSWD: /usr/local/sbin/allsky-boot-config add-overlay imx519
+${REAL_USER} ALL=(root) NOPASSWD: /usr/local/sbin/allsky-boot-config add-overlay arducam_64mp
 SUDOEOF
 chmod 0440 /etc/sudoers.d/allsky-web
 visudo -cf /etc/sudoers.d/allsky-web >/dev/null 2>&1 || true
@@ -657,4 +760,10 @@ fi
 echo ""
 cyan  "  Everything is managed from the browser — no more terminal needed."
 cyan  "  The setup wizard will guide you through camera configuration."
+if [[ -n "${WEB_AUTH_NOTICE}" ]]; then
+  echo ""
+  yellow "  Web login is enabled."
+  yellow "  ${WEB_AUTH_NOTICE}"
+  yellow "  Save this password. It is not stored in clear text."
+fi
 echo ""

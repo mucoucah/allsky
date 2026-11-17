@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import { api } from "../lib/api";
 import { LogConsole } from "./LogConsole";
+import Login from "./Login";
 
 const links = [
   { to: "/",               label: "Dashboard",     Icon: LayoutDashboard },
@@ -28,11 +29,24 @@ export default function Layout() {
     queryFn: api.health,
     staleTime: 300_000,
   });
+  const { data: who, isLoading: whoLoading } = useQuery({
+    queryKey: ["whoami"],
+    queryFn: api.whoami,
+    staleTime: 30_000,
+    retry: false,
+  });
 
   // Close menu on navigation.
   useEffect(() => { setMenuOpen(false); }, [location.pathname]);
 
   const toggle = useCallback(() => setMenuOpen((v) => !v), []);
+
+  if (whoLoading) {
+    return <div className="min-h-full p-6 text-sm text-ink-dim">Loading…</div>;
+  }
+  if (who && !who.auth_disabled && !who.authenticated) {
+    return <Login />;
+  }
 
   return (
     <div className="min-h-full flex flex-col">

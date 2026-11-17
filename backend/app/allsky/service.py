@@ -39,7 +39,7 @@ ALLOWED_VERBS = {"start", "stop", "restart", "status"}
 async def systemctl(verb: str) -> dict[str, Any]:
     if verb not in ALLOWED_VERBS:
         raise ServiceError(f"verb {verb!r} not allowed")
-    cmd = ["sudo", "-n", "systemctl", verb, "allsky.service"]
+    cmd = ["sudo", "-n", "/usr/bin/systemctl", verb, "allsky.service"]
     if verb == "status":
         # Status doesn't need sudo and we want it to never block on a tty.
         cmd = ["systemctl", "--no-pager", "status", "allsky.service"]

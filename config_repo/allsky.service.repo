@@ -7,8 +7,8 @@ Wants=allskyperiodic.service
 User=XX_ALLSKY_OWNER_XX
 ExecStart=XX_ALLSKY_HOME_XX/allsky.sh
 SyslogIdentifier=allsky
-Restart=on-success
-RestartSec=2
+Restart=on-failure
+RestartSec=10
 ; These exit code are fatal.
 RestartPreventExitStatus=XX_NO_RESTART_CODES_XX
 

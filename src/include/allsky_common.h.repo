@@ -396,6 +396,10 @@ void displaySettings(config);
 char *LorF(double, char const *, char const *);
 bool day_night_timeSleep(bool, config, bool);
 void delayBetweenImages(config, long, std::string);
+// Read ${ALLSKY_HOME}/tmp/thermal_guard. Returns extra delay in ms.
+// *paused is set when capture should sleep instead of exposing.
+// *skipProcessing is set when overlays and other per-frame extras should be skipped.
+long readThermalGuard(char const *allskyHome, bool *paused, bool *skipProcessing);
 bool getCommandLineArguments(config *, int, char *[], bool);
 bool getConfigFileArguments(config *);
 int displayNotificationImage(char const *);

@@ -14,7 +14,7 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 def auth_required() -> bool:
     s = get_settings()
-    return bool(s.auth_user)
+    return bool(s.auth_enabled and s.auth_user and s.auth_pass_hash)
 
 
 def _verify(password: str) -> bool:

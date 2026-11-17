@@ -5,7 +5,7 @@ import asyncio
 import time
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Body, HTTPException
 
 from app.allsky.service import ServiceError, systemctl
 from app.allsky.status import read_camera_info, read_messages, read_status, read_version
@@ -125,6 +125,28 @@ async def system_status():
         allsky["service_active"] = False
 
     return {"host": host, "allsky": allsky}
+
+
+@router.get("/thermal")
+async def thermal_status():
+    from app.allsky.thermal import load_config, public_status
+
+    status = public_status()
+    status.update(load_config())
+    # Live fields win over the saved config keys of the same name.
+    status.update(public_status())
+    return status
+
+
+@router.put("/thermal")
+async def set_thermal(body: dict = Body(...)):
+    from app.allsky.thermal import save_config
+
+    try:
+        saved = save_config(body)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return {"ok": True, "config": saved}
 
 
 @router.get("/throttle-history")

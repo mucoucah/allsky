@@ -1,28 +1,32 @@
 """Background watcher loops that fire alerts through the notification infra.
 
-Two watchers run as asyncio tasks during the FastAPI lifespan:
-  1. Meteor watcher — runs detection on tmp/image.jpg after every new frame,
-     fires an alert (with optional annotated snapshot + timelapse) when streaks
-     are found.
-  2. Focus watcher — periodically computes a sharpness score and alerts if
-     it stays below the calibrated baseline for N consecutive checks.
+Watchers run as asyncio tasks during the FastAPI lifespan. Heavy image work
+is handed to a worker thread so the event loop keeps serving the API.
 
-Both watchers are gated by their respective config enable flags.
+Meteor detection follows each new night frame (inotify on tmp/image.jpg).
+Focus, rain, ADS-B, and satellite watchers stay off unless their config
+enables them. Focus and rain also idle while the thermal guard is warm.
 """
 from __future__ import annotations
 
 import asyncio
 import logging
 import time
-from datetime import date
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
+import numpy as np
+from watchfiles import Change, awatch
+
+from app.allsky.daynight import is_night_now
 from app.allsky.paths import paths
+from app.allsky.thermal import skip_nonessential
 from app.db import connect, insert_alert
 
 from .channels import Attachment, dispatch
 from .focus import assess_focus
-from .meteor import detect as detect_meteor
+from .meteor import analyze as analyze_meteor
+from .meteor import save_hit
 from .adsb import Aircraft, RateLimitError, evaluate_triggers, fetch_metadata, fetch_nearby, is_emergency, min_poll_seconds
 from .rain import detect_rain
 from .satellites import compute_passes, current_positions, download_tles
@@ -61,71 +65,179 @@ def _build_attachments(
 
 # ── meteor watcher ───────────────────────────────────────────────
 
+def _meteor_state_path() -> Path:
+    from app.config import get_settings
+    return get_settings().data_dir / "meteor_state.json"
+
+
+def _load_meteor_state() -> dict:
+    path = _meteor_state_path()
+    if not path.exists():
+        return {}
+    try:
+        import json
+        with path.open() as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def _save_meteor_state(data: dict) -> None:
+    import json
+    path = _meteor_state_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(json.dumps(data))
+    tmp.replace(path)
+
+
+def _night_date() -> str:
+    """Allsky night folders use the date 12 hours ago so post-midnight stays with that night."""
+    return (datetime.now() - timedelta(hours=12)).strftime("%Y%m%d")
+
+
+async def _commit_meteor(cfg: dict, image, lines, annotated: bytes | None) -> None:
+    """Save a confirmed hit and send an alert unless the cooldown is still open."""
+    when = datetime.now().astimezone()
+    dest = paths().html / "allsky" / "meteors" / _night_date()
+    saved = await asyncio.to_thread(save_hit, image, lines, dest, when)
+    log.info("meteor_watcher: saved %s (%d streak(s))", saved.get("frame"), len(lines))
+    if not _alert_allowed(cfg):
+        log.info("meteor_watcher: hit saved, alert suppressed by cooldown")
+        return
+    _save_meteor_state({"last_alert_ts": time.time()})
+    await insert_alert("info", "meteor", f"{len(lines)} meteor(s) detected")
+    channels = load_channels()
+    atts: list[Attachment] = []
+    if annotated:
+        atts.append(Attachment("meteor_detected.jpg", annotated, "image/jpeg"))
+    subject = f"Meteor detected ({len(lines)})"
+    body = (
+        f"{len(lines)} meteor streak(s) in a night frame.\n"
+        f"Saved under html/allsky/meteors/{_night_date()}/."
+    )
+    await dispatch(channels, subject, body, atts)
+    log.info("meteor_watcher: alerted %d meteor(s)", len(lines))
+
+
+def _alert_allowed(cfg: dict) -> bool:
+    cooldown = float(cfg.get("alert_cooldown_minutes", 10)) * 60.0
+    last = float(_load_meteor_state().get("last_alert_ts", 0))
+    return (time.time() - last) >= cooldown
+
+
+async def _handle_meteor_frame(
+    target: Path,
+    cfg: dict,
+    history: list[np.ndarray],
+    previous_lines: list[tuple[int, int, int, int]],
+    pending: dict | None,
+) -> tuple[list[np.ndarray], list[tuple[int, int, int, int]], dict | None]:
+    """Run detection in a worker thread. Returns updated history, lines, and pending hit."""
+    from .meteor import line_continues
+
+    mask_path = paths().masks_dir / "mask.png"
+    min_length = int(cfg.get("min_streak_length", 100))
+    result, small, original = await asyncio.to_thread(
+        analyze_meteor,
+        target,
+        min_length,
+        0,
+        True,
+        mask_path if mask_path.exists() else None,
+        history[-1] if history else None,
+        list(history),
+        previous_lines,
+    )
+    if small is None or original is None:
+        return history, previous_lines, pending
+
+    # Confirm the previous frame's streak only if it did not continue into this one.
+    if pending and pending.get("lines"):
+        h, w = pending["image"].shape[:2]
+        survivors = [
+            ln for ln in pending["lines"]
+            if not line_continues(ln, result.candidate_lines, w, h)
+        ]
+        if survivors:
+            await _commit_meteor(cfg, pending["image"], survivors, pending.get("annotated"))
+
+    history = (history + [small])[-3:]
+    new_pending = None
+    if result.candidate_lines:
+        new_pending = {
+            "lines": list(result.candidate_lines),
+            "image": original,
+            "annotated": result.annotated_jpeg,
+        }
+    return history, list(result.candidate_lines), new_pending
+
+
 async def meteor_watcher(stop: asyncio.Event) -> None:
-    """Watch for new frames and run meteor detection on each one."""
+    """Detect meteors on every new night frame. Never sleeps for minutes between frames."""
     log.info("meteor_watcher: starting")
-    last_mtime: float = 0.0
+    warned_location = False
+    history: list[np.ndarray] = []
+    previous_lines: list[tuple[int, int, int, int]] = []
+    pending: dict | None = None
 
     while not stop.is_set():
         try:
-            cfg = load_comet_config()  # reloaded each iteration for live changes
+            cfg = load_comet_config()
             if not cfg.get("enabled"):
+                if pending and pending.get("lines"):
+                    await _commit_meteor(cfg, pending["image"], pending["lines"], pending.get("annotated"))
+                history.clear()
+                previous_lines = []
+                pending = None
                 await _sleep(stop, 30)
                 continue
 
             target = paths().latest_image
-            if not target.exists():
-                await _sleep(stop, 10)
-                continue
+            target.parent.mkdir(parents=True, exist_ok=True)
+            last_mtime = target.stat().st_mtime if target.exists() else 0.0
 
-            mtime = target.stat().st_mtime
-            if mtime <= last_mtime:
-                await _sleep(stop, 5)
-                continue
-            last_mtime = mtime
+            async for changes in awatch(target.parent, stop_event=stop, debounce=300, step=100):
+                if stop.is_set():
+                    return
+                cfg = load_comet_config()
+                if not cfg.get("enabled"):
+                    break
+                relevant = any(
+                    p == str(target) and ctype in (Change.added, Change.modified)
+                    for ctype, p in changes
+                )
+                if not relevant or not target.exists():
+                    continue
+                try:
+                    mtime = target.stat().st_mtime
+                except OSError:
+                    continue
+                if mtime <= last_mtime:
+                    continue
+                last_mtime = mtime
 
-            min_length = cfg.get("min_streak_length", 100)
-            # Find the mask file if it exists.
-            mask_path = paths().masks_dir / "mask.png"
-            result = detect_meteor(
-                target, min_length=min_length, annotate=True,
-                mask_path=mask_path if mask_path.exists() else None,
-            )
-            if result.meteor_count > 0:
-                # Dedup: one alert per day.
-                today = date.today().isoformat()
-                if await _already_alerted("meteor", today):
-                    await _sleep(stop, cfg.get("poll_interval_minutes", 15) * 60)
+                night = is_night_now()
+                if night is None and not warned_location:
+                    log.warning("meteor_watcher: latitude/longitude unset; night-only detection is idle")
+                    warned_location = True
+                if night is not True:
+                    if pending and pending.get("lines"):
+                        await _commit_meteor(cfg, pending["image"], pending["lines"], pending.get("annotated"))
+                    history.clear()
+                    previous_lines = []
+                    pending = None
                     continue
 
-                await _record_alert("meteor", today)
-                await insert_alert("info", "meteor", f"{result.meteor_count} meteor(s) detected")
-
-                channels = load_channels()
-                atts: list[Attachment] = []
-                if result.annotated_jpeg:
-                    atts.append(Attachment("meteor_detected.jpg", result.annotated_jpeg, "image/jpeg"))
-                if cfg.get("include_timelapse"):
-                    tl = _read_file(paths().tmp / "mini-timelapse.mp4")
-                    if tl:
-                        atts.append(Attachment("timelapse.mp4", tl, "video/mp4"))
-
-                subject = f"Meteor detected ({result.meteor_count})"
-                body = (
-                    f"{result.meteor_count} meteor streak(s) found in the latest allsky frame.\n"
-                    f"Lines detected: {result.line_count}."
+                history, previous_lines, pending = await _handle_meteor_frame(
+                    target, cfg, history, previous_lines, pending,
                 )
-                await dispatch(channels, subject, body, atts)
-                log.info("meteor_watcher: alerted %d meteor(s)", result.meteor_count)
-
-            poll = cfg.get("poll_interval_minutes", 15)
-            await _sleep(stop, poll * 60)
-
         except asyncio.CancelledError:
             raise
         except Exception:
             log.exception("meteor_watcher: error")
-            await _sleep(stop, 60)
+            await _sleep(stop, 5)
 
     log.info("meteor_watcher: stopped")
 
@@ -141,6 +253,9 @@ async def focus_watcher(stop: asyncio.Event) -> None:
             cfg = load_focus_config()
             if not cfg.get("enabled"):
                 consecutive_soft = 0
+                await _sleep(stop, 30)
+                continue
+            if skip_nonessential():
                 await _sleep(stop, 30)
                 continue
 
@@ -207,6 +322,9 @@ async def rain_watcher(stop: asyncio.Event) -> None:
         try:
             cfg = load_rain_config()
             if not cfg.get("enabled"):
+                await _sleep(stop, 30)
+                continue
+            if skip_nonessential():
                 await _sleep(stop, 30)
                 continue
 

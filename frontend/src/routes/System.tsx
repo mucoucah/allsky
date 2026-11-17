@@ -1,19 +1,21 @@
 import { useState } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Wifi, Power, RefreshCw,
   Activity, Server, Clock, AlertTriangle, Zap, Camera, FolderOpen,
   PowerOff, RotateCcw, ChevronDown, ChevronUp,
 } from "lucide-react";
-import { api, AllskyDiskUsage } from "../lib/api";
+import { api, AllskyDiskUsage, ThermalConfig } from "../lib/api";
+import { usePollInterval } from "../hooks/usePollInterval";
 import { StatusPill } from "../components/StatusPill";
 import { UpdateSection, DarksSection, GenerateForDateSection, UploadSection } from "./Maintenance";
 
 export default function System() {
+  const systemPoll = usePollInterval(15_000);
   const { data: sys, refetch: refetchSys } = useQuery({
     queryKey: ["system"],
     queryFn: api.system,
-    refetchInterval: 3_000,
+    refetchInterval: systemPoll,
   });
 
   const { data: allskyDisk } = useQuery({
@@ -102,6 +104,8 @@ export default function System() {
           </div>
         )}
       </div>
+
+      <ThermalCard />
 
       {/* System monitors — horizontal bar charts */}
       {h && (
@@ -591,11 +595,84 @@ function DayNightSection({ time }: { time: NonNullable<import("../lib/api").Syst
 
 /* ── Throttle history ───────────────────────────────────────────── */
 
+function ThermalCard() {
+  const qc = useQueryClient();
+  const { data } = useQuery({
+    queryKey: ["thermal"],
+    queryFn: api.thermal,
+    refetchInterval: usePollInterval(15_000),
+  });
+  const [draft, setDraft] = useState<Partial<ThermalConfig> | null>(null);
+  const save = useMutation({
+    mutationFn: api.setThermal,
+    onSuccess: () => {
+      setDraft(null);
+      qc.invalidateQueries({ queryKey: ["thermal"] });
+      qc.invalidateQueries({ queryKey: ["system"] });
+    },
+  });
+  if (!data) return null;
+  const d = { ...data, ...(draft ?? {}) };
+  const state = data.state ?? "ok";
+  return (
+    <div className="card flex flex-col gap-3">
+      <div className="flex items-center gap-2 flex-wrap">
+        <h2 className="text-lg font-semibold">Thermal guard</h2>
+        <span className={`text-xs font-medium ${
+          state === "stopped" ? "text-err" : state === "warm" ? "text-warn" : "text-ok"
+        }`}>
+          {state}
+          {data.temp_c != null ? ` · ${Number(data.temp_c).toFixed(1)} °C` : ""}
+        </span>
+      </div>
+      <p className="text-xs text-ink-dim">{data.message}</p>
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm">
+        <label className="flex items-center gap-2">
+          <input
+            type="checkbox"
+            checked={Boolean(d.enabled)}
+            onChange={(e) => setDraft({ ...d, enabled: e.target.checked })}
+          />
+          Enabled
+        </label>
+        {([
+          ["warn_c", "Warm °C"],
+          ["stop_c", "Stop °C"],
+          ["resume_c", "Resume °C"],
+          ["poll_seconds", "Poll seconds"],
+          ["warm_extra_delay_ms", "Extra delay ms"],
+        ] as const).map(([key, label]) => (
+          <label key={key} className="text-xs text-ink-dim">
+            {label}
+            <input
+              type="number"
+              className="mt-1 w-full rounded-lg bg-bg-base border border-bg-raised px-2 py-1 text-sm text-ink"
+              value={Number(d[key] ?? 0)}
+              onChange={(e) => setDraft({ ...d, [key]: Number(e.target.value) })}
+            />
+          </label>
+        ))}
+      </div>
+      <div className="flex items-center gap-2">
+        <button
+          disabled={!draft || save.isPending}
+          onClick={() => draft && save.mutate(draft)}
+          className="px-3 py-1.5 rounded-lg bg-accent text-bg-base text-sm font-medium disabled:opacity-50"
+        >
+          {save.isPending ? "Saving…" : "Save thresholds"}
+        </button>
+        {save.isError && <span className="text-xs text-err">Check the values (resume &lt; warm &lt; stop, poll 30–60 s).</span>}
+        {save.isSuccess && <span className="text-xs text-ok">Saved</span>}
+      </div>
+    </div>
+  );
+}
+
 function ThrottleHistorySection() {
   const qc = useQuery({
     queryKey: ["throttle-history"],
     queryFn: api.throttleHistory,
-    refetchInterval: 10_000,
+    refetchInterval: usePollInterval(15_000),
   });
   const clearMut = useMutation({
     mutationFn: api.clearThrottleHistory,

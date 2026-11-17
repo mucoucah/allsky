@@ -105,11 +105,14 @@ def delete_channel(channel_id: str) -> bool:
 
 _DEFAULT_COMET_CFG: dict = {
     "enabled": False,
+    # Legacy key. The watcher is driven by new frames, not this interval.
     "poll_interval_minutes": 15,
+    "alert_cooldown_minutes": 10,
+    "min_streak_length": 100,
     "default_mag_threshold": 10.0,
     "default_alt_threshold_deg": 5.0,
     "include_snapshot": True,
-    "include_timelapse": True,
+    "include_timelapse": False,
     "comets": [],
 }
 

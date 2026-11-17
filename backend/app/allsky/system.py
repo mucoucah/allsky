@@ -235,7 +235,26 @@ def _pi_model() -> str | None:
     return None
 
 
+_THROTTLE_CACHE: dict[str, Any] = {"ts": 0.0, "value": None}
+_THROTTLE_MIN_INTERVAL = 45.0
+
+
+def throttle_status(force: bool = False) -> dict[str, Any] | None:
+    """Read Pi throttle bits. vcgencmd is not called more than once per 45 s."""
+    now = time.time()
+    if not force and (now - float(_THROTTLE_CACHE["ts"])) < _THROTTLE_MIN_INTERVAL:
+        return _THROTTLE_CACHE["value"]
+    value = _read_throttle_status()
+    _THROTTLE_CACHE["ts"] = now
+    _THROTTLE_CACHE["value"] = value
+    return value
+
+
 def _throttle_status() -> dict[str, Any] | None:
+    return throttle_status()
+
+
+def _read_throttle_status() -> dict[str, Any] | None:
     """Read Pi throttle/voltage status from vcgencmd get_throttled."""
     try:
         out = subprocess.run(
@@ -306,7 +325,7 @@ def system_snapshot() -> dict[str, Any]:
 
     load1, load5, load15 = psutil.getloadavg()
 
-    return {
+    snap = {
         "boot_time": int(psutil.boot_time()),
         "uptime_seconds": int(time.time() - psutil.boot_time()),
         "cpu_percent": psutil.cpu_percent(interval=None),
@@ -342,6 +361,16 @@ def system_snapshot() -> dict[str, Any]:
         "throttle": _throttle_status(),
         "time": _time_info(),
     }
+    return _with_thermal(snap)
+
+
+def _with_thermal(snap: dict[str, Any]) -> dict[str, Any]:
+    try:
+        from .thermal import public_status
+        snap["thermal"] = public_status()
+    except Exception:
+        snap["thermal"] = None
+    return snap
 
 
 def allsky_disk_usage() -> dict[str, int]:

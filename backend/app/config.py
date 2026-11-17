@@ -12,6 +12,13 @@ from pathlib import Path
 from pydantic import BaseModel
 
 
+def _env_flag(name: str, default: bool) -> bool:
+    raw = os.environ.get(name)
+    if raw is None or raw.strip() == "":
+        return default
+    return raw.strip().lower() not in ("0", "false", "no", "off")
+
+
 class Settings(BaseModel):
     # Where the existing (upstream) Allsky lives. We never write outside this
     # tree except for our own database in DATA_DIR.
@@ -38,9 +45,11 @@ class Settings(BaseModel):
         "ALLSKY_WEB_SECRET", "dev-only-change-me-in-production"
     )
 
-    # If set, require this username/password (bcrypt hash) for the WebUI.
-    # Empty username disables auth (useful for trusted LAN-only setups).
-    auth_user: str = os.environ.get("ALLSKY_WEB_USER", "")
+    # Auth is on by default. The installer writes ALLSKY_WEB_USER and
+    # ALLSKY_WEB_PASS_HASH. Set ALLSKY_WEB_AUTH=0 to leave a trusted LAN open.
+    # A missing password hash does not lock the UI (nothing could log in).
+    auth_enabled: bool = _env_flag("ALLSKY_WEB_AUTH", True)
+    auth_user: str = os.environ.get("ALLSKY_WEB_USER", "admin")
     auth_pass_hash: str = os.environ.get("ALLSKY_WEB_PASS_HASH", "")
 
     # Live-view broadcast cadence cap (Hz). The actual rate is limited by the
@@ -57,6 +66,10 @@ class Settings(BaseModel):
 
 @lru_cache
 def get_settings() -> Settings:
-    s = Settings()
+    s = Settings(
+        auth_enabled=_env_flag("ALLSKY_WEB_AUTH", True),
+        auth_user=os.environ.get("ALLSKY_WEB_USER", "admin"),
+        auth_pass_hash=os.environ.get("ALLSKY_WEB_PASS_HASH", ""),
+    )
     s.data_dir.mkdir(parents=True, exist_ok=True)
     return s

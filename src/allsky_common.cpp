@@ -1359,6 +1359,42 @@ bool day_night_timeSleep(bool displayedMsg, config cg, bool isDaytime)
 }
 
 
+long readThermalGuard(char const *allskyHome, bool *paused, bool *skipProcessing)
+{
+	if (paused) *paused = false;
+	if (skipProcessing) *skipProcessing = false;
+	if (allskyHome == NULL || allskyHome[0] == '\0')
+		return 0;
+
+	std::string path = std::string(allskyHome) + "/tmp/thermal_guard";
+	FILE *f = fopen(path.c_str(), "r");
+	if (f == NULL)
+		return 0;
+
+	char state[32];
+	long extra = 0;
+	int skip = 0;
+	state[0] = '\0';
+	int n = fscanf(f, "%31s %ld %d", state, &extra, &skip);
+	fclose(f);
+	if (n < 1)
+		return 0;
+
+	if (strcmp(state, "stopped") == 0) {
+		if (paused) *paused = true;
+		if (skipProcessing) *skipProcessing = true;
+		return 0;
+	}
+	if (strcmp(state, "warm") == 0) {
+		if (skipProcessing) *skipProcessing = (skip != 0);
+		if (extra < 0) extra = 0;
+		if (extra > 120000) extra = 120000;	// cap at 2 minutes
+		return extra;
+	}
+	return 0;
+}
+
+
 void delayBetweenImages(config cg, long lastExposure_us, std::string sleepType)
 {
 	if (cg.takeDarkFrames) {
@@ -1383,6 +1419,16 @@ void delayBetweenImages(config cg, long lastExposure_us, std::string sleepType)
 	} else {
 		s_us = cg.currentDelay_ms * US_IN_MS;
 		Log(2, "  > Sleeping %s between %s exposures\n", length_in_units(s_us, false), sleepType.c_str());
+	}
+
+	// Thermal guard lengthens the gap while the CPU is warm. The file is
+	// missing on a cool Pi, which leaves the configured delay unchanged.
+	bool thermalPaused = false;
+	bool thermalSkip = false;
+	long extra_ms = readThermalGuard(cg.allskyHome, &thermalPaused, &thermalSkip);
+	if (!thermalPaused && extra_ms > 0) {
+		s_us += extra_ms * US_IN_MS;
+		Log(2, "  > Thermal guard added %ld ms\n", extra_ms);
 	}
 
 	usleep(s_us);	// usleep() is in us (microseconds)

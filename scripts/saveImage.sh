@@ -314,6 +314,13 @@ if [[ ${SAVE_IMAGE} == "true" ]]; then
 
 		TIMELAPSE_MINI_IMAGES="${S_minitimelapsenumimages}"
 		TIMELAPSE_MINI_FREQUENCY="${S_minitimelapsefrequency}"
+		# Thermal guard: mini-timelapse is optional and expensive while the CPU is hot.
+		if [[ -f ${ALLSKY_TMP}/thermal_guard ]]; then
+			read -r _TG_STATE _TG_DELAY TG_SKIP < "${ALLSKY_TMP}/thermal_guard" || true
+			if [[ ${TG_SKIP:-0} == "1" ]]; then
+				TIMELAPSE_MINI_IMAGES=0
+			fi
+		fi
 		if [[ ${TIMELAPSE_MINI_IMAGES} -eq 0 ]]; then
 			TIMELAPSE_MINI_UPLOAD_VIDEO="false"
 
