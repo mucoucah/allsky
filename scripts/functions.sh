@@ -1030,6 +1030,15 @@ function check_settings_link()
 	FULL_CORRECT_NAME="${DIRNAME}/${CORRECT_NAME}"
 	SETTINGS_LINK="$( get_links "${FULL_FILE}" )"
 	RET=$?
+	# A previous model string (imx290 vs "imx290 60.00 fps") leaves an extra
+	# hardlink. The correct name being present is enough; drop the stale ones.
+	if [[ ${RET} -eq 0 ]] && echo "${SETTINGS_LINK}" | grep -Fxq -- "${FULL_CORRECT_NAME}"; then
+		while IFS= read -r extra; do
+			[[ -z ${extra} || ${extra} == "${FULL_CORRECT_NAME}" ]] && continue
+			rm -f "${extra}"
+		done <<< "${SETTINGS_LINK}"
+		return 0
+	fi
 	if [[ ${RET} -ne 0 ]]; then
 		MSG="The settings file '${FILE}' was not linked to '${CORRECT_NAME}'"
 		[[ ${RET} -ne "${NO_LINK_}" ]] && MSG+="\nERROR: ${SETTINGS_LINK}."

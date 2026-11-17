@@ -1639,6 +1639,12 @@ bool getCommandLineArguments(config *cg, int argc, char *argv[], bool readConfig
 			cg->help = true;
 			cg->quietExit = true;	// we display the help message and quit
 		}
+		else if (strcmp(a, "-check-args") == 0)
+		{
+			// --check-args: one leading '-' was already skipped.
+			cg->checkArgs = true;
+			cg->quietExit = true;
+		}
 		else if (strcmp(a, "version") == 0)
 		{
 			cg->version = argv[++i];

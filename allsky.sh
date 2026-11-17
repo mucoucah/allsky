@@ -415,8 +415,7 @@ fi
 # We must pass "-config ${ARGS_FILE}" on the command line and
 # other settings needed at the start of the capture program.
 {
-	echo "${ARGS}" |
-		grep -E -i -v "^config=|^debuglevel=^cmd=|^cameramodel|^cameranumber|^locale="
+	echo "${ARGS}" | "${ALLSKY_SCRIPTS}/filterCaptureArgs.sh"
 
 	echo "version=${ALLSKY_VERSION}"
 	echo "save_dir=${CAPTURE_SAVE_DIR}"
@@ -429,6 +428,10 @@ if [[ ${OFFLOAD_CAPTURE_ONLY} == "true" ]]; then
 fi
 
 # If the user wants images uploaded only every n times, save that number to a file.
+# Capture-only does not load every setting into the shell. Default to every image.
+if [[ -z ${IMG_UPLOAD_FREQUENCY:-} ]]; then
+	IMG_UPLOAD_FREQUENCY="${S_imageuploadfrequency:-1}"
+fi
 if [[ ${IMG_UPLOAD_FREQUENCY} -ne 1 ]]; then
 	# Save "1" so we upload the first image.
 	# saveImage.sh will write ${IMG_UPLOAD_FREQUENCY} to the file as needed.

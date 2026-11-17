@@ -65,40 +65,10 @@ mkdir -p "${ALLSKY_HOME}"/{tmp,config,images,darks,bin,logs}
 mkdir -p /var/lib/allsky/outbox
 chown -R "${REAL_USER}:${REAL_GROUP}" /var/lib/allsky "${ALLSKY_HOME}"
 
-# Same catalog the full install copies. capture and allsky.sh both need it
-# (get_model_from_sensor / showSupportedCameras). Without it, gawk reports
-# the file missing and the camera-change check treats "imx290" as a new camera.
-for repo_file in RPi_cameraInfo.txt env.json autoexposure.json; do
-  src="${ALLSKY_HOME}/config_repo/${repo_file}.repo"
-  dest="${ALLSKY_HOME}/config/${repo_file}"
-  if [[ -f "${src}" && ( ${repo_file} == "RPi_cameraInfo.txt" || ! -f "${dest}" ) ]]; then
-    cp "${src}" "${dest}"
-  fi
-done
-
-if [[ ! -f "${ALLSKY_HOME}/config/settings.json" ]]; then
-  cat > "${ALLSKY_HOME}/config/settings.json" <<'JSON'
-{
-  "cameratype": "RPi",
-  "cameramodel": "imx290",
-  "cameranumber": "0",
-  "filename": "image.jpg",
-  "quality": 90,
-  "latitude": "",
-  "longitude": "",
-  "angle": -6,
-  "lastchanged": "1",
-  "nightmaxautoexposure": 10000,
-  "nightexposure": 8000,
-  "nightgain": 16,
-  "nightmaxautogain": 29,
-  "nightdelay": 500,
-  "dayexposure": 300,
-  "timelapsewidth": 1920,
-  "timelapseheight": 0
-}
-JSON
-fi
+# options.json is what convertJSON.py --capture-only uses to decide which
+# settings reach capture_RPi. The catalog, env, and autoexposure files match
+# the full install. User latitude/longitude/angle/cameramodel are kept.
+python3 "${ALLSKY_HOME}/offload/pi/prepare_config.py" --home "${ALLSKY_HOME}"
 
 if [[ ! -f "${ALLSKY_HOME}/config/offload.json" ]]; then
   python3 - <<PY
@@ -113,38 +83,9 @@ data.setdefault("outbox_dir", "/var/lib/allsky/outbox")
 dest.write_text(json.dumps(data, indent=2) + "\n")
 PY
 fi
-
-# Store the camera-info model ("imx290 60.00 fps"), not the bare sensor or "imx462".
-# A value that already has a space is left alone, so a tuned full install is kept.
-if [[ -f "${ALLSKY_HOME}/config/settings.json" && -f "${ALLSKY_HOME}/config/RPi_cameraInfo.txt" ]]; then
-  python3 - <<PY
-import json
-from pathlib import Path
-info_path = Path("${ALLSKY_HOME}/config/RPi_cameraInfo.txt")
-settings_path = Path("${ALLSKY_HOME}/config/settings.json")
-settings = json.loads(settings_path.read_text())
-model = settings.get("cameramodel", "")
-if model and " " not in str(model):
-    lookup = "imx290" if model == "imx462" else model
-    for line in info_path.read_text().splitlines():
-        if not line.startswith("camera\t"):
-            continue
-        parts = line.split("\t")
-        if len(parts) >= 4 and parts[1].strip() == lookup:
-            settings["cameramodel"] = parts[3].strip()
-            print(f"    Fixed cameramodel: {model} -> {settings['cameramodel']}")
-            settings_path.write_text(json.dumps(settings, indent=4) + "\n")
-            break
-cn = settings.get("cameranumber")
-if isinstance(cn, int):
-    settings["cameranumber"] = str(cn)
-    settings_path.write_text(json.dumps(settings, indent=4) + "\n")
-PY
-fi
-chown "${REAL_USER}:${REAL_GROUP}" "${ALLSKY_HOME}/config/offload.json" "${ALLSKY_HOME}/config/settings.json"
-if [[ -f "${ALLSKY_HOME}/config/RPi_cameraInfo.txt" ]]; then
-  chown "${REAL_USER}:${REAL_GROUP}" "${ALLSKY_HOME}/config/RPi_cameraInfo.txt"
-fi
+# Copies above run as root. The capture user must own every file in config/,
+# including env.json, autoexposure.json, and options.json.
+chown -R "${REAL_USER}:${REAL_GROUP}" "${ALLSKY_HOME}/config"
 
 ALLSKY_TMP="${ALLSKY_HOME}/tmp"
 mkdir -p "${ALLSKY_TMP}"

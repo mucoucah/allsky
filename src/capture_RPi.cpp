@@ -527,6 +527,20 @@ int main(int argc, char *argv[])
 		exit(EXIT_ERROR_STOP);
 	}
 
+	// --check-args loads the capture config and validates latitude/longitude,
+	// then exits before libcamera or the connected-camera file is touched.
+	if (CG.checkArgs)
+	{
+		if (CG.configFile[0] != '\0' && ! getConfigFileArguments(&CG))
+			exit(EXIT_ERROR_STOP);
+		if (! validateLatitudeLongitude(&CG))
+			exit(EXIT_ERROR_STOP);
+		printf("check-args: latitude=%s longitude=%s nightexposure_ms=%.4f nightgain=%.4f cameramodel=%s\n",
+			CG.latitude, CG.longitude, CG.temp_nightExposure_ms, CG.nightGain,
+			CG.cm != NULL ? CG.cm : "");
+		exit(EXIT_OK);
+	}
+
 	char bufTime[128]			= { 0 };
 	char bufTemp[1024]			= { 0 };
 	char const *bayer[]			= { "RG", "BG", "GR", "GB" };
