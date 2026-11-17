@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { Camera, MapPin, Check, RefreshCw, Play, Wifi, Settings, Search } from "lucide-react";
 import { api } from "../lib/api";
+import { useCaptureOnly } from "../hooks/useCaptureOnly";
 
 /** Full setup wizard — user never needs a terminal after install.sh.
  *
@@ -12,6 +13,7 @@ import { api } from "../lib/api";
  *    3. Save → auto-starts allsky service
  *    4. Redirect to dashboard */
 export default function Setup() {
+  const captureOnly = useCaptureOnly();
   const qc = useQueryClient();
   const navigate = useNavigate();
   const { data: status, refetch: refetchStatus } = useQuery({
@@ -34,8 +36,10 @@ export default function Setup() {
 
   // Pre-fill lat/lon from existing settings when status loads.
   useEffect(() => {
-    if (status?.latitude) setLat((prev) => prev || status.latitude);
-    if (status?.longitude) setLon((prev) => prev || status.longitude);
+    const latitude = status?.latitude ?? "";
+    const longitude = status?.longitude ?? "";
+    if (latitude) setLat((prev) => prev || latitude);
+    if (longitude) setLon((prev) => prev || longitude);
   }, [status?.latitude, status?.longitude]);
 
   const enableCamera = useMutation({ mutationFn: api.enableCamera });
@@ -50,19 +54,11 @@ export default function Setup() {
         camera_number: cam?.index ?? 0,
         latitude: lat,
         longitude: lon,
-        start_capture: true,
+        start_capture: !captureOnly,
       });
     },
     onSuccess: () => {
       setStep("done");
-      qc.invalidateQueries({ queryKey: ["setupStatus"] });
-      qc.invalidateQueries({ queryKey: ["system"] });
-    },
-  });
-
-  const startService = useMutation({
-    mutationFn: () => api.serviceControl("start"),
-    onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["setupStatus"] });
       qc.invalidateQueries({ queryKey: ["system"] });
     },
@@ -89,7 +85,7 @@ export default function Setup() {
         <LocationSection lat={lat} lon={lon} setLat={setLat} setLon={setLon} />
 
         <div className="card flex flex-wrap gap-2 justify-center">
-          {!status.service_active && (
+          {!captureOnly && !status.service_active && (
             <button
               onClick={() => configure.mutate()}
               disabled={configure.isPending || !lat || !lon}
@@ -98,7 +94,7 @@ export default function Setup() {
               <Play size={16} /> {lat && lon ? "Save & Start camera" : "Enter location first"}
             </button>
           )}
-          {status.service_active && (
+          {!captureOnly && status.service_active && (
             <button
               onClick={() => api.serviceControl("stop").then(() => refetchStatus())}
               className="px-4 py-2 rounded-lg border border-bg-raised text-sm"
@@ -116,7 +112,7 @@ export default function Setup() {
             onClick={() => navigate("/")}
             className="px-4 py-2 rounded-lg bg-accent text-bg-base font-medium"
           >
-            Go to Dashboard
+            Open Live
           </button>
         </div>
       </div>
@@ -137,7 +133,7 @@ export default function Setup() {
             onClick={() => navigate("/")}
             className="px-6 py-2.5 rounded-xl bg-accent text-bg-base text-lg font-semibold"
           >
-            Open Dashboard
+            Open Live
           </button>
         </div>
       </div>
@@ -198,6 +194,7 @@ export default function Setup() {
           <NoCamerasSection
             enableCamera={enableCamera}
             reboot={reboot}
+            captureOnly={captureOnly}
           />
         ) : null}
       </section>
@@ -212,7 +209,7 @@ export default function Setup() {
         className="w-full py-3 rounded-xl bg-accent text-bg-base text-lg font-semibold disabled:opacity-50 inline-flex items-center justify-center gap-2"
       >
         <Play size={20} />
-        {configure.isPending ? "Configuring & starting..." : "Save & start camera"}
+        {configure.isPending ? "Saving..." : captureOnly ? "Save camera settings" : "Save & start camera"}
       </button>
 
       {configure.isError && (
@@ -333,9 +330,11 @@ function LocationSection({
 function NoCamerasSection({
   enableCamera,
   reboot,
+  captureOnly,
 }: {
   enableCamera: ReturnType<typeof useMutation<any, any, void>>;
   reboot: ReturnType<typeof useMutation<any, any, void>>;
+  captureOnly: boolean;
 }) {
   const [selectedSensor, setSelectedSensor] = useState("");
   const installOverlay = useMutation({ mutationFn: (sensor: string) => api.installOverlay(sensor) });
@@ -411,7 +410,7 @@ function NoCamerasSection({
       )}
 
       {/* Reboot button — shown when any action requires reboot */}
-      {needsReboot && (
+      {needsReboot && !captureOnly && (
         <div className="border-t border-bg-raised pt-3 flex flex-wrap items-center gap-3">
           <button
             onClick={() => reboot.mutate()}

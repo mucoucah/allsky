@@ -105,7 +105,7 @@ export default function Videos() {
       </div>
       {data && data.items.length === 0 && (
         <div className="card bg-accent/5 border-accent/20 text-sm">
-          <p className="mb-1">No timelapse videos yet. Timelapses are generated automatically at sunrise (<code>endOfNight.sh</code>), or you can generate one manually from the <strong>Maintenance</strong> page.</p>
+          <p className="mb-1">No timelapse videos yet. Timelapses are generated at the end of the night, or from the <strong>Regenerate night</strong> tab.</p>
           <p className="text-xs text-ink-dim">Timelapse generation requires <code>ffmpeg</code> to be installed. If you installed before v1.11.3, you may need to re-run <code>sudo ./install.sh</code> to get it.</p>
         </div>
       )}

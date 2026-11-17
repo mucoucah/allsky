@@ -223,6 +223,13 @@ def readSettings():
 
     LOGLEVEL = int(getSetting("debuglevel"))
 
+# Missing thumbnail sizes used to reach int(None) in flow-runner.
+_SETTING_DEFAULTS = {
+    "thumbnailsizex": 100,
+    "thumbnailsizey": 75,
+}
+
+
 def getSetting(settingName):
     global SETTINGS
 
@@ -235,6 +242,8 @@ def getSetting(settingName):
     except Exception:
         pass
 
+    if result is None and settingName in _SETTING_DEFAULTS:
+        return _SETTING_DEFAULTS[settingName]
     return result
 
 def writeSettings():

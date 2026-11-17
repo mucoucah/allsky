@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { X, ChevronLeft, ChevronRight, Download } from "lucide-react";
 import { api, fileUrl, ImageRow } from "../lib/api";
+import { fmtBytes } from "../lib/format";
 
 type Sort = "captured_at" | "filename" | "size_bytes" | "exposure_us" | "iso";
 
@@ -260,9 +261,3 @@ function fmtExposure(us: number): string {
   return `${us} µs`;
 }
 
-function fmtBytes(n: number): string {
-  const units = ["B", "KB", "MB", "GB"];
-  let i = 0;
-  while (n >= 1024 && i < units.length - 1) { n /= 1024; i++; }
-  return `${n.toFixed(i ? 1 : 0)} ${units[i]}`;
-}

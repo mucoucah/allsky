@@ -78,6 +78,11 @@ PLACEHOLDER_DEFAULTS: dict[str, Any] = {
     "daydelay": 10_000,   # 10 sec
     "nightdelay": 500,    # 0.5 s — meteor frames should not wait around
 
+    # Gallery thumbs. A settings.json written before these keys existed must
+    # not raise when flow-runner or this loader reads them.
+    "thumbnailsizex": 100,
+    "thumbnailsizey": 75,
+
     # ── White balance (RPi typical values) ──
     "daywbr": 2.5,   # Red channel
     "daywbb": 2.0,   # Blue channel
@@ -317,6 +322,14 @@ def load_values() -> dict[str, Any]:
                 fallback = PLACEHOLDER_DEFAULTS.get(key)
                 if fallback is not None:
                     raw[key] = float(fallback)
+    for key, default in (("thumbnailsizex", 100), ("thumbnailsizey", 75)):
+        if raw.get(key) in (None, ""):
+            raw[key] = default
+            continue
+        try:
+            raw[key] = int(raw[key])
+        except (TypeError, ValueError):
+            raw[key] = default
     return raw
 
 
