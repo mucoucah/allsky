@@ -8,6 +8,7 @@ import { usePollInterval } from "../hooks/usePollInterval";
 import { Tile } from "../components/Tile";
 import { StatusPill } from "../components/StatusPill";
 import { SkyCard } from "../components/SkyCard";
+import { PiHeartbeat } from "../components/OffloadPanel";
 import { callsignLookup } from "../lib/callsigns";
 
 function fmtBytes(n: number): string {
@@ -289,6 +290,8 @@ export default function Dashboard() {
           <div className="text-ink-dim text-sm">loading…</div>
         )}
       </section>
+
+      <PiHeartbeat />
 
       {/* Sun/Moon card — compact, below Allsky status */}
       {sys?.host.time && <SkyCard time={sys.host.time} />}

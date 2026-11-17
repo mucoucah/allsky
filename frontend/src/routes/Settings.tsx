@@ -153,6 +153,10 @@ export default function Settings() {
 
   return (
     <div className="flex flex-col gap-4">
+      <p className="text-xs text-ink-dim">
+        Camera numbers are edited here and, in capture-only mode, copied to the Pi.
+        The offload host, SSH key, and JPEG quality live on the System page.
+      </p>
       {/* Sticky toolbar */}
       <div className="card sticky top-14 z-10 flex flex-wrap items-center gap-3">
         <input

@@ -152,6 +152,61 @@ export interface ImageRow {
   has_thumbnail: number;
 }
 
+export interface OffloadConfig {
+  mode: "normal" | "capture-only";
+  jpeg_quality: number;
+  outbox_dir: string;
+  outbox_max_bytes: number;
+  drop_day_frames: boolean;
+  night_priority: boolean;
+  remote: {
+    host: string;
+    port: number;
+    user: string;
+    path: string;
+    ssh_key: string;
+    bandwidth_limit_kbps: number;
+    settings_path: string;
+    status_name: string;
+  };
+  processor: {
+    incoming_dir: string;
+    data_dir: string;
+    to_pi_dir: string;
+    retention_days: number;
+    max_disk_bytes: number;
+    encoder: string;
+    meteor_scale: number;
+    use_cuda: string;
+    min_streak_length: number;
+    poll_seconds: number;
+    quiet_with_day_seconds: number;
+    quiet_alone_seconds: number;
+  };
+  persisted?: boolean;
+  path?: string | null;
+}
+
+export interface PiHeartbeatStatus {
+  timestamp: string;
+  hostname?: string;
+  mode?: string;
+  temp_c: number | null;
+  throttled?: {
+    raw: string;
+    throttled_now?: boolean;
+    soft_temp_limit_now?: boolean;
+    any_now?: boolean;
+  };
+  disk?: { free: number; total: number; percent: number };
+  outbox_bytes?: number;
+  outbox_files?: number;
+  last_frame_time: string | null;
+  last_frame_name?: string | null;
+  camera_error: string | null;
+  thermal_state?: string;
+}
+
 export const api = {
   health: () => request<{ ok: boolean; version: string }>("/health"),
   whoami: () => request<{ authenticated: boolean; user: string | null; auth_disabled?: boolean }>("/auth/whoami"),
@@ -160,6 +215,10 @@ export const api = {
   thermal: () => request<ThermalConfig>("/system/thermal"),
   setThermal: (cfg: Partial<ThermalConfig>) =>
     request<{ ok: boolean; config: ThermalConfig }>("/system/thermal", { method: "PUT", json: cfg }),
+  offload: () => request<OffloadConfig>("/offload"),
+  saveOffload: (cfg: OffloadConfig) =>
+    request<OffloadConfig>("/offload", { method: "PUT", json: cfg }),
+  offloadPi: () => request<{ ok: boolean; status: PiHeartbeatStatus | null; message?: string }>("/offload/pi"),
 
   // Setup wizard
   setupStatus: () => request<{

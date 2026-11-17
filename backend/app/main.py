@@ -20,8 +20,15 @@ from app.allsky.thermal import thermal_monitor
 from app.allsky.watcher import watch_latest_image
 from app.config import get_settings
 from app.db import init_db
-from app.notify.watchers import adsb_watcher, focus_watcher, meteor_watcher, rain_watcher, satellite_watcher
-from app.routers import alerts, auth, images, keograms, live, logs, maintenance, masks, notifications, settings, setup, system
+from app.notify.watchers import (
+    adsb_watcher,
+    focus_watcher,
+    meteor_watcher,
+    offload_hit_watcher,
+    rain_watcher,
+    satellite_watcher,
+)
+from app.routers import alerts, auth, images, keograms, live, logs, maintenance, masks, notifications, offload, settings, setup, system
 from app.ws.manager import LiveBroadcaster
 
 log = logging.getLogger("allskyweb")
@@ -42,6 +49,7 @@ async def lifespan(app: FastAPI):
     # Alert watchers (meteor detection + focus monitoring + rain detection + ADS-B).
     app.state.thermal_task = asyncio.create_task(thermal_monitor(app.state.watcher_stop))
     app.state.meteor_task = asyncio.create_task(meteor_watcher(app.state.watcher_stop))
+    app.state.offload_hit_task = asyncio.create_task(offload_hit_watcher(app.state.watcher_stop))
     app.state.focus_task = asyncio.create_task(focus_watcher(app.state.watcher_stop))
     app.state.rain_task = asyncio.create_task(rain_watcher(app.state.watcher_stop))
     app.state.adsb_task = asyncio.create_task(adsb_watcher(app.state.watcher_stop))
@@ -55,6 +63,7 @@ async def lifespan(app: FastAPI):
             app.state.watcher_task,
             app.state.thermal_task,
             app.state.meteor_task,
+            app.state.offload_hit_task,
             app.state.focus_task,
             app.state.rain_task,
             app.state.adsb_task,
@@ -123,6 +132,7 @@ def create_app() -> FastAPI:
         alerts.router,
         auth.router,
         notifications.router,
+        offload.router,
         logs.router,
         setup.router,
         maintenance.router,

@@ -356,8 +356,16 @@ sudo chmod 775 "${ALLSKY_ABORTS_DIR}"
 
 rm -f "${ALLSKY_NOTIFICATION_LOG}"	# clear out any notificatons from prior runs.
 
+# Capture-only skips ImageMagick notification images and the module runner.
+OFFLOAD_CAPTURE_ONLY=false
+if [[ -f ${ALLSKY_HOME}/offload/mode.py ]] && python3 "${ALLSKY_HOME}/offload/mode.py" --quiet; then
+	OFFLOAD_CAPTURE_ONLY=true
+fi
+
 # Can do this in the background to speed up startup.
-"${ALLSKY_SCRIPTS}/copyNotificationImage.sh" --expires 0 "StartingUp" 2>&1 &
+if [[ ${OFFLOAD_CAPTURE_ONLY} == "false" ]]; then
+	"${ALLSKY_SCRIPTS}/copyNotificationImage.sh" --expires 0 "StartingUp" 2>&1 &
+fi
 
 # Only pass settings that are used by the capture program.
 if ! ARGS="$( "${ALLSKY_SCRIPTS}/convertJSON.php" --capture-only )" ; then
@@ -377,6 +385,11 @@ fi
 	[[ ${PREVIEW} == "true" ]] && echo "preview=true"
 } > "${ARGS_FILE}"
 
+# libcamera --quality. Explicit values survive checkForValidExtension().
+if [[ ${OFFLOAD_CAPTURE_ONLY} == "true" ]]; then
+	python3 "${ALLSKY_HOME}/offload/mode.py" --apply-quality "${ARGS_FILE}" || true
+fi
+
 # If the user wants images uploaded only every n times, save that number to a file.
 if [[ ${IMG_UPLOAD_FREQUENCY} -ne 1 ]]; then
 	# Save "1" so we upload the first image.
@@ -386,10 +399,12 @@ else
 	rm -f "${FREQUENCY_FILE}"
 fi
 
-# Clear up any flow timings
-activate_python_venv
-python3 "${ALLSKY_SCRIPTS}/flow-runner.py" --cleartimings
-deactivate_python_venv
+# Clear up any flow timings. Capture-only has no module venv and no overlays.
+if [[ ${OFFLOAD_CAPTURE_ONLY} == "false" ]]; then
+	activate_python_venv
+	python3 "${ALLSKY_SCRIPTS}/flow-runner.py" --cleartimings
+	deactivate_python_venv
+fi
 
 function catch_signal() { return 0; }
 trap "catch_signal" SIGTERM SIGINT SIGHUP
@@ -422,7 +437,9 @@ if [[ ${RETCODE} -eq ${EXIT_RESTARTING} ]]; then
 	else
 		NOTIFICATION_TYPE="Restarting"
 	fi
-	"${ALLSKY_SCRIPTS}/copyNotificationImage.sh" "${NOTIFICATION_TYPE}"
+	if [[ ${OFFLOAD_CAPTURE_ONLY} == "false" ]]; then
+		"${ALLSKY_SCRIPTS}/copyNotificationImage.sh" "${NOTIFICATION_TYPE}"
+	fi
 	set_allsky_status "${ALLSKY_STATUS_RESTARTING}"
 	doExit 0 "${NOTIFICATION_TYPE}"		# use 0 so the service is restarted
 fi
@@ -436,7 +453,9 @@ if [[ ${RETCODE} -eq ${EXIT_RESET_USB} ]]; then
 	else
 		NOTIFICATION_TYPE="Restarting"
 	fi
-	"${ALLSKY_SCRIPTS}/copyNotificationImage.sh" "${NOTIFICATION_TYPE}"
+	if [[ ${OFFLOAD_CAPTURE_ONLY} == "false" ]]; then
+		"${ALLSKY_SCRIPTS}/copyNotificationImage.sh" "${NOTIFICATION_TYPE}"
+	fi
 	set_allsky_status "${ALLSKY_STATUS_ERROR}"
 	doExit 0 ""		# use 0 so the service is restarted
 fi
