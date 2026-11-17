@@ -1,15 +1,8 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { api, OffloadConfig, PiHeartbeatStatus } from "../lib/api";
+import { api, type OffloadConfig, type PiHeartbeatStatus } from "../lib/api";
 import { usePollInterval } from "../hooks/usePollInterval";
-
-function fmtBytes(n: number): string {
-  const units = ["B", "KB", "MB", "GB", "TB"];
-  let i = 0;
-  let value = n;
-  while (value >= 1024 && i < units.length - 1) { value /= 1024; i++; }
-  return `${value.toFixed(i ? 1 : 0)} ${units[i]}`;
-}
+import { fmtBytes } from "../lib/format";
 
 export function PiHeartbeat() {
   const poll = usePollInterval(15_000);
@@ -22,7 +15,7 @@ export function PiHeartbeat() {
   if (!status) {
     return (
       <section className="card flex flex-col gap-2">
-        <h2 className="text-lg font-semibold">Camera Pi</h2>
+        <h2 className="text-lg font-semibold">Pi</h2>
         <p className="text-sm text-ink-dim">
           {data?.message ?? "Waiting for a heartbeat from the Pi."}
         </p>
@@ -34,23 +27,21 @@ export function PiHeartbeat() {
   return (
     <section className="card flex flex-col gap-2">
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold">Camera Pi</h2>
+        <h2 className="text-lg font-semibold">Pi</h2>
         <span className={`pill ${hot ? "pill-err" : "pill-ok"}`}>
-          {status.thermal_state}
+          {status.thermal_state ?? "Pi"}
         </span>
       </div>
-      <Row label="Host" value={status.hostname ?? "—"} />
-      <Row label="CPU" value={status.temp_c == null ? "—" : `${status.temp_c.toFixed(1)} C`} />
-      <Row label="Throttle" value={throttle?.raw ?? "—"} />
+      <p className="text-[10px] text-ink-dim -mt-1">Values below come from the Pi heartbeat.</p>
+      <Row label="Pi host" value={status.hostname ?? "—"} />
+      <Row label="Pi CPU" value={status.temp_c == null ? "—" : `${status.temp_c.toFixed(1)} °C`} />
+      <Row label="Pi throttle" value={throttle?.raw ?? "—"} />
+      <Row label="Pi disk free" value={status.disk ? fmtBytes(status.disk.free) : "—"} />
       <Row
-        label="Disk free"
-        value={status.disk ? fmtBytes(status.disk.free) : "—"}
-      />
-      <Row
-        label="Outbox"
+        label="Pi outbox"
         value={`${status.outbox_files ?? 0} files, ${fmtBytes(status.outbox_bytes ?? 0)}`}
       />
-      <Row label="Last frame" value={status.last_frame_time ?? "—"} />
+      <Row label="Pi last frame" value={status.last_frame_time ?? "—"} />
       {status.camera_error && (
         <p className="text-xs text-err break-words">{status.camera_error}</p>
       )}
@@ -103,7 +94,7 @@ const EMPTY: OffloadConfig = {
   },
 };
 
-export default function OffloadPanel() {
+function useOffloadDraft() {
   const qc = useQueryClient();
   const { data } = useQuery({ queryKey: ["offload"], queryFn: api.offload });
   const [draft, setDraft] = useState<OffloadConfig>(EMPTY);
@@ -116,28 +107,29 @@ export default function OffloadPanel() {
   const save = useMutation({
     mutationFn: api.saveOffload,
     onSuccess: () => {
-      setMsg("Saved. Camera settings and the push file are written for the Pi to pull.");
+      setMsg("Saved. The Pi pulls this on its next sync.");
       qc.invalidateQueries({ queryKey: ["offload"] });
     },
     onError: (err: Error) => setMsg(err.message),
   });
 
+  return { draft, setDraft, save, msg };
+}
+
+export function CaptureSettings() {
+  const { draft, setDraft, save, msg } = useOffloadDraft();
+
   function setRemote(key: keyof OffloadConfig["remote"], value: string | number) {
     setDraft((prev) => ({ ...prev, remote: { ...prev.remote, [key]: value } }));
-  }
-  function setProcessor(key: keyof OffloadConfig["processor"], value: string | number) {
-    setDraft((prev) => ({ ...prev, processor: { ...prev.processor, [key]: value } }));
   }
 
   return (
     <section className="card flex flex-col gap-3">
       <div>
-        <h2 className="text-lg font-semibold">Offload to PC</h2>
+        <h2 className="text-lg font-semibold">Capture</h2>
         <p className="text-xs text-ink-dim mt-1">
-          Run this web UI on the PC. Capture-only on the Pi skips overlays, ImageMagick,
-          and end-of-night products. The Pi reads <span className="font-mono">config/offload.json</span>.
-          Saving here also writes <span className="font-mono">to-pi/offload-push.json</span>, which the
-          Pi pulls. The SSH host and key stay on the Pi until the first copy of that file.
+          These numbers are copied to the Pi. JPEG quality, day-frame dropping, and night
+          priority decide what the Pi sends. Host, SSH key, and processor paths are on System.
         </p>
       </div>
       <label className="flex flex-col gap-1 text-sm">
@@ -156,6 +148,48 @@ export default function OffloadPanel() {
         <Field label="Bandwidth limit (kbps, 0 = none)" value={draft.remote.bandwidth_limit_kbps} onChange={(v) => setRemote("bandwidth_limit_kbps", Number(v))} />
         <Field label="Outbox max bytes" value={draft.outbox_max_bytes} onChange={(v) => setDraft({ ...draft, outbox_max_bytes: Number(v) })} />
         <Field label="Outbox directory (on the Pi)" value={draft.outbox_dir} onChange={(v) => setDraft({ ...draft, outbox_dir: v })} />
+      </div>
+      <label className="flex items-center gap-2 text-sm">
+        <input
+          type="checkbox"
+          checked={draft.drop_day_frames}
+          onChange={(e) => setDraft({ ...draft, drop_day_frames: e.target.checked })}
+        />
+        Drop day frames on the Pi
+      </label>
+      <label className="flex items-center gap-2 text-sm">
+        <input
+          type="checkbox"
+          checked={draft.night_priority}
+          onChange={(e) => setDraft({ ...draft, night_priority: e.target.checked })}
+        />
+        Send night frames before day frames
+      </label>
+      <SaveRow pending={save.isPending} msg={msg} onSave={() => save.mutate(draft)} />
+    </section>
+  );
+}
+
+export function ProcessorSettings() {
+  const { draft, setDraft, save, msg } = useOffloadDraft();
+
+  function setRemote(key: keyof OffloadConfig["remote"], value: string | number) {
+    setDraft((prev) => ({ ...prev, remote: { ...prev.remote, [key]: value } }));
+  }
+  function setProcessor(key: keyof OffloadConfig["processor"], value: string | number) {
+    setDraft((prev) => ({ ...prev, processor: { ...prev.processor, [key]: value } }));
+  }
+
+  return (
+    <section className="card flex flex-col gap-3">
+      <div>
+        <h2 className="text-lg font-semibold">PC processor</h2>
+        <p className="text-xs text-ink-dim mt-1">
+          Where the Pi uploads frames and where this PC writes products. Capture-only on the Pi
+          skips overlays, ImageMagick, and end-of-night products.
+        </p>
+      </div>
+      <div className="grid md:grid-cols-2 gap-3">
         <Field label="PC host" value={draft.remote.host} onChange={(v) => setRemote("host", v)} />
         <Field label="SSH port" value={draft.remote.port} onChange={(v) => setRemote("port", Number(v))} />
         <Field label="SSH user" value={draft.remote.user} onChange={(v) => setRemote("user", v)} />
@@ -163,7 +197,7 @@ export default function OffloadPanel() {
         <Field label="Incoming path" value={draft.remote.path} onChange={(v) => setRemote("path", v)} />
         <Field label="Settings path the Pi pulls" value={draft.remote.settings_path} onChange={(v) => setRemote("settings_path", v)} />
         <Field label="Processor incoming dir" value={draft.processor.incoming_dir} onChange={(v) => setProcessor("incoming_dir", v)} />
-        <Field label="Processor data dir (web UI home)" value={draft.processor.data_dir} onChange={(v) => setProcessor("data_dir", v)} />
+        <Field label="Processor data dir" value={draft.processor.data_dir} onChange={(v) => setProcessor("data_dir", v)} />
         <Field label="Retention days" value={draft.processor.retention_days} onChange={(v) => setProcessor("retention_days", Number(v))} />
         <Field label="Disk budget bytes (0 = days only)" value={draft.processor.max_disk_bytes} onChange={(v) => setProcessor("max_disk_bytes", Number(v))} />
         <label className="flex flex-col gap-1 text-sm">
@@ -192,33 +226,23 @@ export default function OffloadPanel() {
           </select>
         </label>
       </div>
-      <label className="flex items-center gap-2 text-sm">
-        <input
-          type="checkbox"
-          checked={draft.drop_day_frames}
-          onChange={(e) => setDraft({ ...draft, drop_day_frames: e.target.checked })}
-        />
-        Drop day frames on the Pi
-      </label>
-      <label className="flex items-center gap-2 text-sm">
-        <input
-          type="checkbox"
-          checked={draft.night_priority}
-          onChange={(e) => setDraft({ ...draft, night_priority: e.target.checked })}
-        />
-        Send night frames before day frames
-      </label>
-      <div className="flex items-center gap-3">
-        <button
-          className="px-3 py-1.5 rounded-lg bg-accent text-bg-base text-sm font-medium disabled:opacity-50"
-          disabled={save.isPending}
-          onClick={() => save.mutate(draft)}
-        >
-          Save offload config
-        </button>
-        {msg && <span className="text-xs text-ink-muted">{msg}</span>}
-      </div>
+      <SaveRow pending={save.isPending} msg={msg} onSave={() => save.mutate(draft)} />
     </section>
+  );
+}
+
+function SaveRow({ pending, msg, onSave }: { pending: boolean; msg: string | null; onSave: () => void }) {
+  return (
+    <div className="flex items-center gap-3">
+      <button
+        className="px-3 py-1.5 rounded-lg bg-accent text-bg-base text-sm font-medium disabled:opacity-50"
+        disabled={pending}
+        onClick={onSave}
+      >
+        Save offload config
+      </button>
+      {msg && <span className="text-xs text-ink-muted">{msg}</span>}
+    </div>
   );
 }
 

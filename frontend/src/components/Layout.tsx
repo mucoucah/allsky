@@ -2,22 +2,18 @@ import { useState, useCallback, useEffect } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import {
-  LayoutDashboard, Image as ImageIcon, Settings as SettingsIcon,
-  Film, Bell, Cpu, Radar, Layers,
+  Radio, MoonStar, Archive, Camera, Server, Boxes,
 } from "lucide-react";
 import { api } from "../lib/api";
-import { LogConsole } from "./LogConsole";
 import Login from "./Login";
 
 const links = [
-  { to: "/",               label: "Dashboard",     Icon: LayoutDashboard },
-  { to: "/gallery",        label: "Gallery",        Icon: ImageIcon },
-  { to: "/media",          label: "Media",          Icon: Film },
-  { to: "/settings",       label: "Settings",       Icon: SettingsIcon },
-  { to: "/image-tools",    label: "Image Tools",    Icon: Layers },
-  { to: "/sky-monitor",    label: "Sky Monitor",    Icon: Radar },
-  { to: "/alerts",         label: "Alerts",         Icon: Bell },
-  { to: "/system",         label: "System",         Icon: Cpu },
+  { to: "/", label: "Live", Icon: Radio },
+  { to: "/tonight", label: "Tonight", Icon: MoonStar },
+  { to: "/archive", label: "Archive", Icon: Archive },
+  { to: "/camera", label: "Camera", Icon: Camera },
+  { to: "/system", label: "System", Icon: Server },
+  { to: "/extras", label: "Extras", Icon: Boxes },
 ];
 
 export default function Layout() {
@@ -120,8 +116,6 @@ export default function Layout() {
         </>
       )}
 
-      {/* Floating log console — available on every page */}
-      <LogConsole />
     </div>
   );
 }

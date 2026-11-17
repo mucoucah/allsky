@@ -59,6 +59,17 @@ for vmp in valid_module_paths:
 
 import allsky_shared as shared
 
+
+def _setting_int(value, default):
+    """int() a settings value, or default when the key is missing or not numeric."""
+    try:
+        if value is None or value == "":
+            return default
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-e", "--event",  type=str, help="The event we are running modules for (defaults to postcapture).", default="postcapture", choices=["postcapture","daynight", "nightday", "periodic"])
@@ -97,8 +108,8 @@ if __name__ == "__main__":
 
         shared.fullFilename = shared.getEnvironmentVariable("FULL_FILENAME", fatal=True);
         shared.createThumbnails = bool(shared.getSetting("imagecreatethumbnails"))
-        shared.thumbnailWidth = int(shared.getSetting("thumbnailsizex"))
-        shared.thumbnailHeight = int(shared.getSetting("thumbnailsizey"))
+        shared.thumbnailWidth = _setting_int(shared.getSetting("thumbnailsizex"), 100)
+        shared.thumbnailHeight = _setting_int(shared.getSetting("thumbnailsizey"), 75)
         shared.websiteImageFile = os.path.join(shared.ALLSKY_TMP, shared.fullFilename)
         shared.TOD = shared.args.tod
         date = datetime.now()

@@ -4,6 +4,7 @@ import { api, type SettingDef } from "../lib/api";
 import { evaluateDepends } from "../lib/depends";
 import { fieldErrors } from "../lib/validate";
 import { SettingField } from "../components/SettingField";
+import { useCaptureOnly } from "../hooks/useCaptureOnly";
 
 /** Editable, schema-driven settings UI.
  *
@@ -14,6 +15,7 @@ import { SettingField } from "../components/SettingField";
  *  - Save sends only the diff to the backend, which validates again and shells
  *    out to upstream's makeChanges.sh for application. */
 export default function Settings() {
+  const captureOnly = useCaptureOnly();
   const qc = useQueryClient();
   const { data: schema, error: schemaErr, isError: schemaFailed } = useQuery({
     queryKey: ["schema"], queryFn: api.settingsSchema, retry: 2,
@@ -95,6 +97,8 @@ export default function Settings() {
       qc.invalidateQueries({ queryKey: ["system"] });
       if (opts?.restart) {
         setMsg(`Saved ${dirtyCount} change${dirtyCount === 1 ? "" : "s"} and restarted Allsky. Camera settings are now active.`);
+      } else if (needsRestart && captureOnly) {
+        setMsg(`Saved ${dirtyCount} change${dirtyCount === 1 ? "" : "s"}. The Pi pulls these camera settings on its next sync.`);
       } else if (needsRestart) {
         setMsg(`Saved ${dirtyCount} change${dirtyCount === 1 ? "" : "s"}. Note: camera settings (exposure, gain, etc.) require a service restart to take effect.`);
       } else {
@@ -155,7 +159,7 @@ export default function Settings() {
     <div className="flex flex-col gap-4">
       <p className="text-xs text-ink-dim">
         Camera numbers are edited here and, in capture-only mode, copied to the Pi.
-        The offload host, SSH key, and JPEG quality live on the System page.
+        JPEG quality and night priority are on the Capture tab. The PC host and SSH key are on System.
       </p>
       {/* Sticky toolbar */}
       <div className="card sticky top-14 z-10 flex flex-wrap items-center gap-3">
@@ -220,7 +224,7 @@ export default function Settings() {
           >
             {save.isPending ? "Saving\u2026" : "Save"}
           </button>
-          {needsRestart && (
+          {needsRestart && !captureOnly && (
             <button
               disabled={
                 dirtyCount === 0 || save.isPending || validationErrors.length > 0
