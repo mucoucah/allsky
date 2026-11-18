@@ -22,6 +22,7 @@ from app.config import get_settings
 from app.db import init_db
 from app.notify.watchers import (
     adsb_watcher,
+    disk_guard_watcher,
     focus_watcher,
     meteor_watcher,
     offload_hit_watcher,
@@ -50,6 +51,7 @@ async def lifespan(app: FastAPI):
     app.state.thermal_task = asyncio.create_task(thermal_monitor(app.state.watcher_stop))
     app.state.meteor_task = asyncio.create_task(meteor_watcher(app.state.watcher_stop))
     app.state.offload_hit_task = asyncio.create_task(offload_hit_watcher(app.state.watcher_stop))
+    app.state.disk_guard_task = asyncio.create_task(disk_guard_watcher(app.state.watcher_stop))
     app.state.focus_task = asyncio.create_task(focus_watcher(app.state.watcher_stop))
     app.state.rain_task = asyncio.create_task(rain_watcher(app.state.watcher_stop))
     app.state.adsb_task = asyncio.create_task(adsb_watcher(app.state.watcher_stop))
@@ -64,6 +66,7 @@ async def lifespan(app: FastAPI):
             app.state.thermal_task,
             app.state.meteor_task,
             app.state.offload_hit_task,
+            app.state.disk_guard_task,
             app.state.focus_task,
             app.state.rain_task,
             app.state.adsb_task,

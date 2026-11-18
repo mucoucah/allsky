@@ -100,6 +100,13 @@ export default function System() {
               Capture-only: this PC does not start or stop the Pi camera service.
             </p>
           )}
+          {sys?.storage && (
+            <p className={`text-sm ${sys.storage.disk_guard.active ? "text-warn" : "text-ink-muted"}`}>
+              Data drive {fmtBytes(sys.storage.free_bytes)} free
+              {" · "}raw frames kept {sys.storage.raw_retention_days} days
+              {" · "}disk guard {sys.storage.disk_guard.active ? "active" : "inactive"}
+            </p>
+          )}
           {control.data && (
             <div className={`text-sm ${control.data.exit_code === 0 ? "text-ok" : "text-warn"}`}>
               {control.data.verb} returned {control.data.exit_code}.

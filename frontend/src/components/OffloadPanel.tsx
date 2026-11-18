@@ -83,6 +83,8 @@ const EMPTY: OffloadConfig = {
     data_dir: "/srv/allsky/data",
     to_pi_dir: "/srv/allsky/to-pi",
     retention_days: 14,
+    raw_retention_days: 14,
+    min_free_gb: 10,
     max_disk_bytes: 0,
     encoder: "auto",
     meteor_scale: 1.0,
@@ -186,7 +188,9 @@ export function ProcessorSettings() {
         <h2 className="text-lg font-semibold">PC processor</h2>
         <p className="text-xs text-ink-dim mt-1">
           Where the Pi uploads frames and where this PC writes products. Capture-only on the Pi
-          skips overlays, ImageMagick, and end-of-night products.
+          skips overlays, ImageMagick, and end-of-night products. Raw frame retention deletes
+          capture JPEGs older than that many days and keeps timelapse, keogram, startrails,
+          and meteor hits. The disk guard is shown on the PC card.
         </p>
       </div>
       <div className="grid md:grid-cols-2 gap-3">
@@ -198,7 +202,8 @@ export function ProcessorSettings() {
         <Field label="Settings path the Pi pulls" value={draft.remote.settings_path} onChange={(v) => setRemote("settings_path", v)} />
         <Field label="Processor incoming dir" value={draft.processor.incoming_dir} onChange={(v) => setProcessor("incoming_dir", v)} />
         <Field label="Processor data dir" value={draft.processor.data_dir} onChange={(v) => setProcessor("data_dir", v)} />
-        <Field label="Retention days" value={draft.processor.retention_days} onChange={(v) => setProcessor("retention_days", Number(v))} />
+        <Field label="Raw frame retention days" value={draft.processor.raw_retention_days ?? 14} onChange={(v) => setProcessor("raw_retention_days", Number(v))} />
+        <Field label="Low-disk guard (GB free)" value={draft.processor.min_free_gb ?? 10} onChange={(v) => setProcessor("min_free_gb", Number(v))} />
         <Field label="Disk budget bytes (0 = days only)" value={draft.processor.max_disk_bytes} onChange={(v) => setProcessor("max_disk_bytes", Number(v))} />
         <label className="flex flex-col gap-1 text-sm">
           Encoder

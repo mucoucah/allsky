@@ -282,6 +282,27 @@ ls /srv/allsky/incoming
 
 A frame should leave `incoming` and show up under `/srv/allsky/data/images/<date>/`. The dashboard "Camera Pi" card shows temperature and the last frame time. Turn meteor detection on under Sky Monitor so a saved hit also sends an alert. At the end of the night the processor writes `images/<date>/keogram/`, `images/<date>/startrails/`, and `images/<date>/allsky-<date>.mp4`.
 
+### Data disk
+
+`processor.raw_retention_days` (default 14) and `processor.min_free_gb` (default 10) live in `/srv/allsky/offload.json`. Missing keys use those defaults, including an older file that only set `retention_days`: that value is used as the raw-frame window until `raw_retention_days` is set. `raw_retention_days` of `0` turns age-based deletion off. `min_free_gb` of `0` turns the disk guard off.
+
+Once at processor startup and then hourly, raw capture files in `images/<YYYYMMDD>/` older than the window are deleted, along with `thumbnails/<same name>` and same-stem `.json`, `.txt`, `.xml`, and `.xmp` sidecars. The scan is a directory walk. It does not use inotify, and it does not create hardlinks or symlinks, so a data root on a Windows drive mounted through WSL drvfs (9p) is safe. The live-image watcher polls that filesystem instead of waiting for inotify.
+
+Kept, including when a day directory would otherwise be empty of raw frames:
+
+- `images/<date>/keogram/`, `images/<date>/startrails/`, `keogram*`, `startrails*`, `startrail*`
+- `images/<date>/allsky-<date>.mp4`, `mini-timelapse*`, and any other video (`.mp4`, `.mkv`, `.webm`, `.mov`, `.avi`)
+- `images/<date>/allsky-<date>.txt` (the timelapse file list)
+- `meteor_*` hit images, crops, and JSON, and anything under a directory named `meteor`, `meteors`, or `hits`
+- `html/allsky/keograms/`, `html/allsky/startrails/`, `html/allsky/videos/`, `html/allsky/meteors/`
+- `tmp/image.jpg`, `config/`, and `darks/`
+
+If hit JSON points at an original raw frame, that frame is copied into the hits directory before the raw file is removed. A day directory that still holds any kept file stays.
+
+`processor.max_disk_bytes` still picks the oldest day directories when the images tree is over budget, and then deletes only raw frames in those directories. `retention_days` is no longer used to delete whole nights.
+
+Before each ingest the processor calls `shutil.disk_usage` on the data root. Below `min_free_gb` it stops storing new raw frames, still runs meteor detection on every incoming frame, still saves hits, still updates `tmp/image.jpg` for the Live page, and deletes the incoming file so the Pi outbox does not fill. It logs a warning, writes `data/config/processor_state.json` `disk_guard: {active, free_gb, since}`, and the web UI raises one alert (and sends it to the configured notification channels). Storage resumes at `min_free_gb + 2` GB. The System page shows free space, the raw retention window, and whether the guard is active. Tripping the guard also runs retention immediately.
+
 ### When the PC is off or asleep
 
 The Pi keeps capturing. Frames stay in the outbox. The sync agent retries with backoff from 5 seconds up to 5 minutes. rsync uses `--partial` and `--append-verify`, so a dropped transfer resumes, and `--remove-source-files` deletes a local file only after that file has been confirmed on the PC. If the outbox crosses `outbox_max_bytes`, the oldest day frames are deleted first and a warning is logged. Night frames are deleted only after the day frames are gone.
@@ -292,7 +313,7 @@ Nothing on the PC runs while it is asleep, so there are no live meteor alerts an
 
 - The PC has to be on for live meteor alerts. Hits that arrive while it is asleep are still detected when the frames are processed, and the web UI alerts only for hits that appear after it has started.
 - The pip OpenCV wheel does not include `cv2.cuda`. NVENC still works from the Windows driver. A CUDA OpenCV build is optional; the CPU path is the one this i7 will use unless you replace the wheel.
-- WSL does not keep running while Windows is asleep. Mirrored networking needs Windows 11. The port-proxy fallback must be refreshed when the WSL address changes.
+- WSL does not keep running while Windows is asleep. Mirrored networking needs Windows 11. The port-proxy fallback must be refreshed when the WSL address changes. A data root on drvfs is polled; inotify on that mount is not used for retention or the live image.
 - Start/stop on the PC System page controls a local `allsky.service`, which the PC does not have. Capture is restarted on the Pi when pulled settings change.
 - Dark-frame capture and the on-Pi overlay editor belong to normal mode. The light profile has no ImageMagick and no web server.
 - Switching a light-client Pi back to `normal` will fail the usual pipeline, because those packages were not installed.

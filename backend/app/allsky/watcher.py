@@ -1,8 +1,9 @@
 """Async watcher that fans out the latest image to WebSocket clients.
 
-Uses watchfiles (which wraps inotify on Linux). When ${ALLSKY_TMP}/image.jpg
-changes, we read the bytes once and hand them to the broadcaster — every
-connected client gets the same buffer, so 1 read serves N viewers.
+Uses watchfiles (inotify on Linux). On drvfs/9p, where the data root may
+live, the same watcher polls instead. When ${ALLSKY_TMP}/image.jpg changes,
+we read the bytes once and hand them to the broadcaster — every connected
+client gets the same buffer, so 1 read serves N viewers.
 """
 from __future__ import annotations
 
@@ -11,10 +12,11 @@ import logging
 import time
 from typing import TYPE_CHECKING
 
-from watchfiles import Change, awatch
+from watchfiles import Change
 
 from app.config import get_settings
 
+from .fs_watch import needs_poll, watch_directory
 from .paths import paths
 from .status import latest_image_meta
 
@@ -39,8 +41,11 @@ async def watch_latest_image(broadcaster: "LiveBroadcaster", stop: asyncio.Event
     # immediately, even if Allsky hasn't produced a new one yet.
     await _maybe_emit(broadcaster, target)
 
+    poll = needs_poll(target)
+    if poll:
+        log.info("watcher: polling %s (filesystem does not support inotify)", target)
     try:
-        async for changes in awatch(target_dir, stop_event=stop):
+        async for changes in watch_directory(target_dir, stop_event=stop, force_polling=poll):
             now = time.monotonic()
             if now - last_emit < min_interval:
                 continue

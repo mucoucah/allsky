@@ -2,7 +2,10 @@
 from __future__ import annotations
 
 import asyncio
+import json
+import shutil
 import time
+from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Body, HTTPException
@@ -124,7 +127,53 @@ async def system_status():
     except Exception:
         allsky["service_active"] = False
 
-    return {"host": host, "allsky": allsky}
+    storage = _processor_storage()
+    return {"host": host, "allsky": allsky, "storage": storage}
+
+
+def _processor_storage() -> dict[str, Any] | None:
+    """Free space, raw-frame retention, and the disk guard for the System page.
+
+    Free space is read with shutil.disk_usage on the processor data root, the
+    same call the disk guard uses. The guard flag comes from the processor
+    state file. A missing offload config still returns the defaults.
+    """
+    try:
+        from app.routers.offload import _load
+
+        cfg, _payload = _load()
+        data = Path(cfg.processor.data_dir)
+        raw_days = int(cfg.processor.raw_retention_days)
+        minimum = float(cfg.processor.min_free_gb)
+    except Exception:
+        return None
+    target = data if data.exists() else (data.parent if data.parent.exists() else Path("/"))
+    try:
+        usage = shutil.disk_usage(target)
+    except OSError:
+        usage = shutil.disk_usage("/")
+    guard = {"active": False, "free_gb": round(usage.free / (1024 ** 3), 2), "since": None}
+    state_path = data / "config" / "processor_state.json"
+    try:
+        raw = json.loads(state_path.read_text())
+    except (OSError, json.JSONDecodeError):
+        raw = None
+    if isinstance(raw, dict) and isinstance(raw.get("disk_guard"), dict):
+        disk = raw["disk_guard"]
+        guard = {
+            "active": bool(disk.get("active")),
+            "free_gb": disk.get("free_gb"),
+            "since": disk.get("since"),
+        }
+    return {
+        "data_dir": str(data),
+        "free_bytes": usage.free,
+        "free_gb": round(usage.free / (1024 ** 3), 2),
+        "total_bytes": usage.total,
+        "raw_retention_days": raw_days,
+        "min_free_gb": minimum,
+        "disk_guard": guard,
+    }
 
 
 @router.get("/thermal")

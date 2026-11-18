@@ -10,15 +10,17 @@ enables them. Focus and rain also idle while the thermal guard is warm.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import time
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
 import numpy as np
-from watchfiles import Change, awatch
+from watchfiles import Change
 
 from app.allsky.daynight import is_night_now
+from app.allsky.fs_watch import watch_directory
 from app.allsky.paths import paths
 from app.allsky.thermal import skip_nonessential
 from app.db import connect, insert_alert
@@ -233,7 +235,12 @@ async def meteor_watcher(stop: asyncio.Event) -> None:
             target.parent.mkdir(parents=True, exist_ok=True)
             last_mtime = target.stat().st_mtime if target.exists() else 0.0
 
-            async for changes in awatch(target.parent, stop_event=stop, debounce=300, step=100):
+            async for changes in watch_directory(
+                target.parent,
+                stop_event=stop,
+                debounce=300,
+                step=100,
+            ):
                 if stop.is_set():
                     return
                 cfg = load_comet_config()
@@ -275,6 +282,78 @@ async def meteor_watcher(stop: asyncio.Event) -> None:
             await _sleep(stop, 5)
 
     log.info("meteor_watcher: stopped")
+
+
+def processor_state_file() -> Path | None:
+    """processor_state.json written by the PC processor, if configured."""
+    try:
+        from app.routers.offload import _load
+
+        cfg, _payload = _load()
+        data = getattr(cfg.processor, "data_dir", "") or ""
+        if data:
+            return Path(data) / "config" / "processor_state.json"
+    except Exception:
+        log.debug("disk guard: offload config unavailable", exc_info=True)
+    return paths().config / "processor_state.json"
+
+
+async def poll_disk_guard() -> None:
+    """Raise one UI alert when the processor's disk guard trips or clears.
+
+    The processor already logs the transition and writes disk_guard into
+    processor_state.json. This hands that flag to the alert table and the
+    configured notification channels, once per activation.
+    """
+    path = processor_state_file()
+    if path is None or not path.is_file():
+        return
+    try:
+        data = json.loads(path.read_text())
+    except (OSError, json.JSONDecodeError):
+        return
+    guard = data.get("disk_guard") if isinstance(data, dict) else None
+    if not isinstance(guard, dict):
+        return
+    active = bool(guard.get("active"))
+    since = str(guard.get("since") or "")
+    free = guard.get("free_gb")
+    if active:
+        if not since or await _already_alerted("disk-guard-active", since):
+            return
+        await _record_alert("disk-guard-active", since)
+        message = (
+            f"Disk guard active: {free} GB free on the data drive. "
+            "Raw frames are not being stored. Meteor hits and the live image still update."
+        )
+        await insert_alert("warning", "disk", message)
+        await dispatch(load_channels(), "Allsky disk space", message, [])
+        log.warning("disk_guard_watcher: %s", message)
+        return
+    if not since or not await _already_alerted("disk-guard-active", since):
+        return
+    if await _already_alerted("disk-guard-recovered", since):
+        return
+    await _record_alert("disk-guard-recovered", since)
+    message = (
+        f"Disk guard cleared: {free} GB free on the data drive. "
+        "Raw frames are being stored again."
+    )
+    await insert_alert("info", "disk", message)
+    await dispatch(load_channels(), "Allsky disk space recovered", message, [])
+    log.info("disk_guard_watcher: %s", message)
+
+
+async def disk_guard_watcher(stop: asyncio.Event) -> None:
+    """Poll the processor state file. The data directory is not inotify-watched."""
+    log.info("disk_guard_watcher: starting")
+    while not stop.is_set():
+        try:
+            await poll_disk_guard()
+        except Exception:
+            log.exception("disk_guard_watcher failed")
+        await _sleep(stop, 30)
+    log.info("disk_guard_watcher: stopped")
 
 
 async def offload_hit_watcher(stop: asyncio.Event) -> None:

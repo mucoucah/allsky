@@ -25,6 +25,8 @@ def test_offload_round_trip(monkeypatch):
         body = got.json()
         assert body["mode"] == "normal"
         assert body["jpeg_quality"] == 90
+        assert body["processor"]["raw_retention_days"] == 14
+        assert body["processor"]["min_free_gb"] == 10
 
         body["mode"] = "capture-only"
         body["jpeg_quality"] = 90

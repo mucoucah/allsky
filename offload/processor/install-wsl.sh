@@ -72,6 +72,8 @@ proc = data.setdefault("processor", {})
 proc["incoming_dir"] = "/srv/allsky/incoming"
 proc["data_dir"] = "/srv/allsky/data"
 proc["to_pi_dir"] = "/srv/allsky/to-pi"
+proc.setdefault("raw_retention_days", 14)
+proc.setdefault("min_free_gb", 10)
 remote = data.setdefault("remote", {})
 remote["path"] = "/srv/allsky/incoming"
 remote["settings_path"] = "/srv/allsky/to-pi"
@@ -168,6 +170,8 @@ echo
 echo "Processor code: ${PREFIX}"
 echo "Web UI env:     /etc/allsky-web/env"
 echo "Incoming:       ${INCOMING}"
+echo "Raw frames:     processor.raw_retention_days (default 14) deletes capture JPEGs only."
+echo "Disk guard:     processor.min_free_gb (default 10) pauses raw storage below that many GB."
 echo "Open the UI at http://<pc-lan-ip>:8000 after the frontend is built."
 if ! command -v node >/dev/null 2>&1; then
   echo "Node.js is not installed. Install Node 20, then:"
