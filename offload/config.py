@@ -36,6 +36,11 @@ class ProcessorConfig:
     data_dir: str = "/srv/allsky/data"
     to_pi_dir: str = "/srv/allsky/to-pi"
     retention_days: int = 14
+    # Age of raw frames kept under images/<YYYYMMDD>/. Products are not deleted.
+    # When this key is absent, retention_days is used so older configs keep
+    # the same raw-frame window. 0 disables age-based raw deletion.
+    raw_retention_days: int = 14
+    min_free_gb: float = 10.0
     max_disk_bytes: int = 0
     encoder: str = "auto"
     meteor_scale: float = 1.0
@@ -109,6 +114,10 @@ def _processor_from(data: dict[str, Any] | None) -> ProcessorConfig:
             setattr(base, key, raw[key])
     base.retention_days = int(base.retention_days)
     base.max_disk_bytes = int(base.max_disk_bytes)
+    if "raw_retention_days" not in raw and "retention_days" in raw:
+        base.raw_retention_days = int(raw["retention_days"])
+    base.raw_retention_days = int(base.raw_retention_days)
+    base.min_free_gb = float(base.min_free_gb)
     base.meteor_scale = float(base.meteor_scale)
     base.min_streak_length = int(base.min_streak_length)
     base.poll_seconds = float(base.poll_seconds)
@@ -174,6 +183,10 @@ def validate_config(data: dict[str, Any]) -> list[str]:
     proc = cfg.processor
     if proc.retention_days < 1:
         errors.append("processor.retention_days must be >= 1")
+    if proc.raw_retention_days < 0:
+        errors.append("processor.raw_retention_days must be >= 0")
+    if proc.min_free_gb < 0:
+        errors.append("processor.min_free_gb must be >= 0")
     if proc.max_disk_bytes < 0:
         errors.append("processor.max_disk_bytes must be >= 0")
     if proc.meteor_scale <= 0:

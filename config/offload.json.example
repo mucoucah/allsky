@@ -20,6 +20,8 @@
     "data_dir": "/srv/allsky/data",
     "to_pi_dir": "/srv/allsky/to-pi",
     "retention_days": 14,
+    "raw_retention_days": 14,
+    "min_free_gb": 10,
     "max_disk_bytes": 0,
     "encoder": "auto",
     "meteor_scale": 1.0,

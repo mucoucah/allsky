@@ -100,6 +100,15 @@ export interface SystemSnapshot {
     raw: unknown;
     camera: { connected: string[]; active: string | null; active_model: string | null };
   };
+  storage?: {
+    data_dir: string;
+    free_bytes: number;
+    free_gb: number;
+    total_bytes: number;
+    raw_retention_days: number;
+    min_free_gb: number;
+    disk_guard: { active: boolean; free_gb: number | null; since: string | null };
+  } | null;
 }
 
 export interface AllskyDiskUsage {
@@ -142,6 +151,8 @@ export interface OffloadConfig {
     data_dir: string;
     to_pi_dir: string;
     retention_days: number;
+    raw_retention_days: number;
+    min_free_gb: number;
     max_disk_bytes: number;
     encoder: string;
     meteor_scale: number;
